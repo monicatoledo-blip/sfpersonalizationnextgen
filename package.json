@@ -1,0 +1,26 @@
+{
+  "name": "sp-demo-builder",
+  "version": "0.1.0",
+  "description": "SP Demo Builder — internal tool for Salesforce SEs to spin up live Salesforce Personalization (Next-Gen) web demos in a connected SDO.",
+  "private": true,
+  "license": "UNLICENSED",
+  "author": "Monica Toledo",
+  "main": "server.js",
+  "engines": {
+    "node": "20.x"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "worker": "node workers/auto-cleanup.js"
+  },
+  "dependencies": {
+    "connect-pg-simple": "^9.0.1",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "jsforce": "^1.11.1",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "pg": "^8.13.1"
+  }
+}

@@ -1,0 +1,2138 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>[[BRAND_NAME]] — Adaptive Web</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: "var(--brand)",
+              "brand-ink": "var(--brand-ink)",
+              "accent-green": "var(--accent-green)",
+            },
+          },
+        },
+      };
+    </script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --brand: [[PRIMARY_COLOR]];
+        --brand-ink: color-mix(in srgb, var(--brand) 65%, black);
+        --accent-green: [[ACCENT_COLOR]];
+        --nav-ink: #032d60;
+        /* Category (detail) page top banner — replaced in editor preview/download */
+        --category-hero-banner-bg: linear-gradient(135deg, [[HERO_GRADIENT_COLOR]] 0%, [[HERO_GRADIENT_COLOR_2]] 100%);
+      }
+      body {
+        font-family: "Open Sans", "Segoe UI", system-ui, sans-serif;
+        margin: 0;
+      }
+      /* Scrollable page shell — Agent chat is fixed to the viewport (see .chat-widget) */
+      .demo-canvas {
+        position: relative;
+        isolation: isolate;
+        min-height: max(800px, 80vh);
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      .bg-brand {
+        background-color: var(--brand);
+      }
+      .text-brand {
+        color: var(--brand);
+      }
+      .border-brand {
+        border-color: var(--brand);
+      }
+
+      /* Chat widget — fixed to viewport so the agent stays visible while .demo-canvas scrolls */
+      .chat-widget {
+        position: fixed;
+        bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+        right: calc(20px + env(safe-area-inset-right, 0px));
+        z-index: 9999;
+        transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.45s ease;
+      }
+      .chat-widget.is-offstage {
+        transform: translateX(calc(100% + 56px));
+        opacity: 0;
+        pointer-events: none;
+      }
+      .chat-widget.is-onstage {
+        transform: translateX(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .site-sticky-nav {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        background: #ffffff;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      .site-nav-logo {
+        width: auto;
+        max-width: min(200px, 42vw);
+        object-fit: contain;
+      }
+      @media (min-width: 768px) {
+        .site-nav-logo {
+          max-width: 240px;
+        }
+      }
+      .site-nav-link {
+        color: var(--nav-ink);
+      }
+      .site-nav-link:hover {
+        color: var(--accent-green);
+      }
+      .text-accent-green {
+        color: var(--accent-green);
+      }
+      .warm-homepage-bg {
+        background: linear-gradient(to bottom, color-mix(in srgb, var(--brand) 7%, #ffffff), #ffffff);
+      }
+      /* Banking mega-row: hover/focus on desktop; tap sublinks on mobile drawer */
+      .nav-dropdown-wrap {
+        position: relative;
+      }
+      .nav-dropdown-panel {
+        display: none;
+        position: absolute;
+        top: calc(100% + 12px);
+        left: 50%;
+        transform: translateX(-50%);
+        min-width: 260px;
+        padding: 8px 0;
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        box-shadow: 0 18px 50px rgba(3, 45, 96, 0.12);
+        z-index: 60;
+      }
+      .nav-dropdown-link {
+        display: block;
+        padding: 10px 18px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--nav-ink);
+        text-decoration: none;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .nav-dropdown-link:hover,
+      .nav-dropdown-link:focus-visible {
+        background: #f0fdf4;
+        color: var(--accent-green);
+        outline: none;
+      }
+      @media (min-width: 768px) {
+        .nav-dropdown-wrap:hover .nav-dropdown-panel,
+        .nav-dropdown-wrap:focus-within .nav-dropdown-panel {
+          display: block;
+        }
+      }
+      .mobile-nav-panel {
+        max-height: min(72vh, 520px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      .mobile-nav-link {
+        display: block;
+        padding: 12px 4px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--nav-ink);
+        text-decoration: none;
+        border-bottom: 1px solid #f1f5f9;
+      }
+      .mobile-nav-link:hover {
+        color: var(--accent-green);
+      }
+      .mobile-banking-sub {
+        padding: 4px 0 8px 12px;
+        border-left: 3px solid var(--accent-green);
+        margin: 4px 0 8px;
+      }
+      .mobile-banking-sub a {
+        display: block;
+        padding: 8px 0;
+        font-size: 14px;
+        font-weight: 600;
+        color: #475569;
+        text-decoration: none;
+      }
+      .mobile-banking-sub a:hover {
+        color: var(--accent-green);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .home-insight-card img {
+          transition: none !important;
+        }
+        @media (hover: hover) and (pointer: fine) {
+          .home-insight-card:hover img {
+            transform: none !important;
+          }
+        }
+      }
+      .category-page-container {
+        display: none;
+        max-width: none;
+        margin: 0 auto;
+        padding: 0;
+      }
+      .category-page-container.is-visible {
+        display: block;
+      }
+      /* Core services grid — lift + shadow on hover (fine pointer only) */
+      .category-service-card {
+        cursor: default;
+        transition:
+          transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+          box-shadow 0.3s ease,
+          border-color 0.3s ease,
+          background-color 0.3s ease;
+      }
+      .category-service-icon-wrap {
+        transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, background-color 0.3s ease;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .category-service-card:hover {
+          transform: translateY(-6px);
+          border-color: color-mix(in srgb, var(--brand) 38%, #e2e8f0);
+          box-shadow:
+            0 12px 28px rgba(3, 45, 96, 0.08),
+            0 24px 56px rgba(3, 45, 96, 0.1);
+        }
+        .category-service-card:hover .category-service-icon-wrap {
+          transform: scale(1.08);
+          box-shadow: 0 10px 24px color-mix(in srgb, var(--brand) 22%, transparent);
+          background-color: color-mix(in srgb, var(--brand) 8%, #f0f9ff) !important;
+        }
+        .category-service-card:hover .category-service-icon-wrap i {
+          color: var(--brand);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .category-service-card,
+        .category-service-icon-wrap,
+        .category-service-icon-wrap i,
+        .category-insight-card,
+        .category-insight-eyebrow,
+        .category-insight-title,
+        .category-insight-cta {
+          transition: none !important;
+        }
+        @media (hover: hover) and (pointer: fine) {
+          .category-service-card:hover {
+            transform: none;
+          }
+          .category-service-card:hover .category-service-icon-wrap {
+            transform: none;
+          }
+          .category-insight-card:hover {
+            transform: none;
+          }
+          .category-insight-card:hover .category-insight-cta {
+            transform: none;
+          }
+        }
+      }
+      /* Market insights cards — same hover language as Core services */
+      .category-insight-card {
+        cursor: default;
+        transition:
+          transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+          box-shadow 0.3s ease,
+          border-color 0.3s ease,
+          background-color 0.3s ease;
+      }
+      .category-insight-eyebrow,
+      .category-insight-title,
+      .category-insight-cta {
+        transition: color 0.25s ease, transform 0.25s ease;
+      }
+      @media (hover: hover) and (pointer: fine) {
+        .category-insight-card:hover {
+          transform: translateY(-6px);
+          border-color: color-mix(in srgb, var(--brand) 38%, #e2e8f0);
+          background-color: #ffffff !important;
+          box-shadow:
+            0 12px 28px rgba(3, 45, 96, 0.08),
+            0 24px 56px rgba(3, 45, 96, 0.1);
+        }
+        .category-insight-card:hover .category-insight-eyebrow,
+        .category-insight-card:hover .category-insight-cta {
+          color: var(--brand);
+        }
+        .category-insight-card:hover .category-insight-cta {
+          transform: translateX(5px);
+        }
+      }
+      .chat-toggle-btn {
+        position: relative;
+        width: 64px;
+        height: 64px;
+        cursor: pointer;
+        border: none;
+        border-radius: 9999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+        transition: transform 0.3s ease;
+        background: linear-gradient(135deg, var(--brand), var(--brand-ink));
+      }
+      .chat-toggle-btn:hover {
+        transform: scale(1.06);
+      }
+      .chat-toggle-btn img {
+        width: 36px;
+        height: 36px;
+        border-radius: 9999px;
+        object-fit: cover;
+      }
+      .notification-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: linear-gradient(135deg, var(--brand), var(--brand-ink));
+        color: white;
+        font-size: 12px;
+        font-weight: 700;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid white;
+        animation: pulse-badge 2s infinite;
+      }
+      @keyframes pulse-badge {
+        0%,
+        100% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.08);
+        }
+      }
+      .chat-window {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: min(100vw - 32px, 400px);
+        height: min(100vh - 100px, 580px);
+        max-height: 580px;
+        display: none !important;
+        flex-direction: column;
+        overflow: hidden;
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        background: #fff;
+      }
+      .chat-window.show {
+        display: flex !important;
+        animation: slideUp 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+      }
+      @keyframes slideUp {
+        from {
+          opacity: 0;
+          transform: translateY(16px) scale(0.96);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      .chat-header {
+        flex-shrink: 0;
+        background: linear-gradient(135deg, var(--brand), var(--brand-ink));
+        color: #fff;
+        padding: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .chat-header-avatar-wrap {
+        width: 40px;
+        height: 40px;
+        border-radius: 9999px;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3px;
+        margin-right: 12px;
+        flex-shrink: 0;
+      }
+      .chat-header-avatar-wrap img {
+        width: 100%;
+        height: 100%;
+        border-radius: 9999px;
+        object-fit: cover;
+      }
+      .chat-header-title {
+        font-weight: 700;
+        font-size: 1.05rem;
+      }
+      .chat-header-sub {
+        font-size: 0.7rem;
+        opacity: 0.95;
+        margin-top: 2px;
+      }
+      .status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: #4ade80;
+        border-radius: 9999px;
+        margin-right: 6px;
+        animation: pulse-dot 2s infinite;
+      }
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+      .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1rem;
+        min-height: 0;
+        background: #f8fafc;
+        scrollbar-width: thin;
+      }
+      .message-bubble {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 12px;
+        animation: fadeInUp 0.35s ease-out;
+      }
+      .message-bubble.user-row {
+        flex-direction: row-reverse;
+      }
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .message-avatar {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 10px;
+        padding: 2px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+      }
+      .message-bubble.user-row .message-avatar {
+        margin-right: 0;
+        margin-left: 10px;
+      }
+      .message-avatar img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+      }
+      .message-content {
+        flex: 1;
+        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+        padding: 12px 16px;
+        border-radius: 16px;
+        border-bottom-left-radius: 4px;
+      }
+      .message-bubble.user-row .message-content {
+        flex: 0 1 auto;
+        max-width: 85%;
+        background: linear-gradient(135deg, var(--brand), var(--brand-ink));
+        border-bottom-right-radius: 4px;
+        border-bottom-left-radius: 16px;
+      }
+      .message-text {
+        color: #1e293b;
+        line-height: 1.55;
+        font-size: 14px;
+      }
+      .message-bubble.user-row .message-text {
+        color: #fff;
+      }
+      .typing-indicator {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 12px 16px;
+        margin: 0 0 12px 46px;
+        background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+        border-radius: 16px;
+        width: fit-content;
+      }
+      .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #64748b;
+        animation: typing-bounce 1.4s infinite ease-in-out;
+      }
+      .typing-dot:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+      .typing-dot:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+      @keyframes typing-bounce {
+        0%,
+        80%,
+        100% {
+          opacity: 0.35;
+          transform: translateY(0);
+        }
+        40% {
+          opacity: 1;
+          transform: translateY(-6px);
+        }
+      }
+      .chat-footer {
+        flex-shrink: 0;
+        background: #fff;
+        border-top: 1px solid #e5e7eb;
+        padding: 12px 16px;
+      }
+      .chat-composer-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px 12px;
+        border: 2px solid #e5e7eb;
+        border-radius: 10px;
+        font-size: 14px;
+        font-family: inherit;
+        margin-bottom: 10px;
+      }
+      .chat-composer-input:focus {
+        outline: none;
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+      }
+      .chat-footer-note {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 10px;
+        font-size: 11px;
+        color: #64748b;
+      }
+      .fade-out {
+        animation: fadeOutWin 0.28s ease forwards;
+      }
+      @keyframes fadeOutWin {
+        to {
+          opacity: 0;
+          transform: translateY(10px) scale(0.98);
+        }
+      }
+
+      /* Adaptive overlay (ADP adaptiveUIContainer pattern) */
+      .adaptive-ui-container {
+        position: fixed;
+        inset: 0;
+        z-index: 9500;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(12px);
+        display: none !important;
+        flex-direction: column;
+        align-items: stretch;
+        overflow-y: auto;
+        padding: 0;
+      }
+      .adaptive-ui-container.show {
+        display: flex !important;
+        animation: fadeInOverlay 0.45s ease-out;
+      }
+      @keyframes fadeInOverlay {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .adaptive-ui-wrapper {
+        width: 100%;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      .adaptive-header {
+        padding: 32px 48px 24px;
+        background: rgba(0, 0, 0, 0.35);
+        color: #fff;
+      }
+      @media (max-width: 768px) {
+        .adaptive-header {
+          padding: 24px 20px 16px;
+        }
+      }
+      .close-adaptive-btn {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+        border: 2px solid rgba(255, 255, 255, 0.35);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: transform 0.25s ease, background 0.2s;
+      }
+      .close-adaptive-btn:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: rotate(90deg) scale(1.05);
+      }
+      .floating-cards-container {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 28px;
+        padding: 40px 48px 32px;
+        max-width: 1600px;
+        margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      @media (max-width: 1200px) {
+        .floating-cards-container {
+          grid-template-columns: 1fr;
+          padding: 28px 20px;
+        }
+      }
+      .solution-card {
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.22);
+        overflow: hidden;
+        position: relative;
+        transition: transform 0.35s ease, box-shadow 0.35s ease;
+      }
+      .solution-card:hover {
+        transform: translateY(-6px);
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.28);
+      }
+      .recommended-badge {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: linear-gradient(135deg, var(--brand), var(--brand-ink));
+        color: #fff;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        z-index: 5;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+      .card-header {
+        padding: 28px 28px 0;
+      }
+      .solution-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+      }
+      .card-body {
+        padding: 20px 28px 28px;
+      }
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-bottom: 20px;
+        align-items: start;
+      }
+      @media (max-width: 640px) {
+        .metrics-grid {
+          gap: 10px;
+        }
+      }
+      .metric-item {
+        text-align: center;
+        min-width: 0;
+      }
+      .metric-value-row {
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        white-space: normal;
+      }
+      .metric-value-core {
+        white-space: nowrap;
+        font-size: 1.35rem;
+        font-weight: 700;
+        line-height: 1.15;
+      }
+      .metric-label {
+        font-size: 10px;
+        text-transform: uppercase;
+        color: #6b7280;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        margin-bottom: 6px;
+      }
+      .metric-value {
+        font-size: 24px;
+        font-weight: 700;
+        line-height: 1.1;
+        white-space: nowrap;
+      }
+      .metric-unit {
+        font-size: 13px;
+        font-weight: 500;
+        color: #6b7280;
+        white-space: nowrap;
+      }
+      .divider {
+        height: 1px;
+        background: linear-gradient(to right, transparent, #e5e7eb, transparent);
+        margin: 20px 0;
+      }
+      .features-title {
+        font-size: 12px;
+        font-weight: 700;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 12px;
+      }
+      .features-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .feature-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 14px;
+        color: #1f2937;
+        line-height: 1.45;
+      }
+      .feature-item i {
+        margin-top: 3px;
+        flex-shrink: 0;
+      }
+      .bundle-highlight {
+        background: color-mix(in srgb, var(--brand) 8%, #ffffff);
+        border-left: 4px solid var(--brand);
+        padding: 14px 16px;
+        border-radius: 12px;
+        font-size: 13px;
+        color: #374151;
+        margin-top: 18px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+      }
+      .bundle-highlight i {
+        flex-shrink: 0;
+        margin-top: 2px;
+      }
+      .card-cta-btn {
+        margin-top: 16px;
+        width: 100%;
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 14px;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        background: linear-gradient(135deg, var(--brand), var(--brand-ink));
+        transition: opacity 0.2s, transform 0.15s;
+      }
+      .card-cta-btn:hover {
+        opacity: 0.95;
+        transform: translateY(-1px);
+      }
+      .adaptive-footer {
+        text-align: center;
+        padding: 24px 48px 36px;
+        color: rgba(255, 255, 255, 0.92);
+        font-size: 13px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        background: rgba(0, 0, 0, 0.35);
+        margin-top: auto;
+      }
+
+      /* Landing page */
+      .landing-page-container {
+        display: none !important;
+        background: #fff;
+      }
+      .landing-page-container.show {
+        display: block !important;
+        animation: fadeInOverlay 0.45s ease-out;
+      }
+      .landing-page-wrapper {
+        min-height: 100vh;
+        position: relative;
+      }
+      .close-landing-btn {
+        position: absolute;
+        top: 20px;
+        right: 24px;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #fff;
+        border: 2px solid #e5e7eb;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.25s ease;
+      }
+      .close-landing-btn:hover {
+        border-color: var(--brand);
+        color: var(--brand);
+        transform: rotate(90deg);
+      }
+      .landing-content {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        min-height: 100vh;
+      }
+      @media (max-width: 968px) {
+        .landing-content {
+          grid-template-columns: 1fr;
+        }
+      }
+      .landing-info {
+        background: color-mix(in srgb, var(--brand) 4%, #ffffff);
+        padding: 72px 56px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .landing-brand {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--brand);
+        letter-spacing: -0.02em;
+        margin-bottom: 32px;
+      }
+      .landing-title {
+        font-size: 2.25rem;
+        font-weight: 700;
+        color: #111827;
+        line-height: 1.15;
+        margin-bottom: 12px;
+      }
+      .landing-subtitle {
+        font-size: 1.125rem;
+        color: #6b7280;
+        margin-bottom: 36px;
+        line-height: 1.5;
+      }
+      .landing-feature-item {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 16px;
+        font-size: 15px;
+        color: #374151;
+      }
+      .landing-feature-item i {
+        color: var(--brand);
+        font-size: 18px;
+      }
+      .trust-badges {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
+        margin-top: 40px;
+        padding-top: 28px;
+        border-top: 2px solid #e5e7eb;
+      }
+      .trust-number {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--brand);
+      }
+      .trust-label {
+        font-size: 12px;
+        color: #6b7280;
+      }
+      .landing-form-container {
+        padding: 72px 56px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+      }
+      .form-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 24px;
+      }
+      .form-group-lp {
+        margin-bottom: 18px;
+      }
+      .form-label-lp {
+        display: block;
+        font-size: 13px;
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 6px;
+      }
+      .form-input-lp {
+        width: 100%;
+        padding: 12px 14px;
+        border: 2px solid #e5e7eb;
+        border-radius: 8px;
+        font-size: 15px;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+      .form-input-lp:focus {
+        outline: none;
+        border-color: var(--brand);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+      }
+      .form-row-lp {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+      }
+      @media (max-width: 640px) {
+        .form-row-lp {
+          grid-template-columns: 1fr;
+        }
+      }
+      .form-submit-btn-lp {
+        width: 100%;
+        margin-top: 12px;
+        padding: 14px 20px;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        background: var(--brand);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .form-submit-btn-lp:hover {
+        opacity: 0.94;
+      }
+      .form-submit-btn-lp:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .form-disclaimer-lp {
+        font-size: 11px;
+        color: #6b7280;
+        margin-top: 16px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body class="antialiased">
+    <div
+      id="demo-canvas"
+      class="demo-canvas min-h-screen bg-white text-slate-800"
+    >
+    <script type="application/json" id="adaptive-mock-profile">[[MOCK_PROFILE_JSON]]</script>
+
+    <div id="site-shell" class="transition-opacity duration-700 ease-in-out">
+      <header class="site-sticky-nav">
+        <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-5 md:px-8">
+          <a href="#" id="navHomeLogoLink" class="flex min-w-0 shrink items-center" aria-label="[[BRAND_NAME]] home">
+            <img
+              class="site-nav-logo h-9 w-auto md:h-11"
+              src="[[ADAPTIVE_NAV_LOGO_URL]]"
+              alt="[[BRAND_NAME]]"
+              width="200"
+              height="40"
+            />
+          </a>
+          <button
+            type="button"
+            id="mobileNavToggle"
+            class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 shadow-sm md:hidden"
+            aria-expanded="false"
+            aria-controls="mobileNavPanel"
+            aria-label="Open menu"
+          >
+            <i class="fas fa-bars text-lg" aria-hidden="true"></i>
+          </button>
+          <nav class="hidden items-center gap-5 text-sm font-semibold lg:gap-6 md:flex" aria-label="Primary">
+            <a class="site-nav-link transition-colors" href="#">Personal</a>
+            <a class="site-nav-link transition-colors" href="#">Corporate</a>
+            <div class="nav-dropdown-wrap">
+              <button
+                type="button"
+                class="site-nav-link inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-semibold transition-colors"
+                aria-expanded="false"
+                aria-haspopup="true"
+                aria-controls="navBankingMenu"
+                id="navBankingBtn"
+              >
+                Banking
+                <i class="fas fa-chevron-down text-[10px] opacity-60" aria-hidden="true"></i>
+              </button>
+              <div
+                id="navBankingMenu"
+                class="nav-dropdown-panel"
+                role="menu"
+                aria-labelledby="navBankingBtn"
+              >
+                <a class="nav-dropdown-link" role="menuitem" href="#cat-core-services" data-cat-scroll>Core services</a>
+                <a class="nav-dropdown-link" role="menuitem" href="#cat-why-us" data-cat-scroll>Why choose us</a>
+                <a class="nav-dropdown-link" role="menuitem" href="#cat-insights" data-cat-scroll>Market insights &amp; resources</a>
+              </div>
+            </div>
+            <a class="site-nav-link transition-colors" href="#">Borrowing</a>
+            <a class="site-nav-link transition-colors" href="#">Investing</a>
+            <a class="site-nav-link transition-colors" href="#">Contact</a>
+            <a
+              class="rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-95"
+              style="background-color: var(--accent-green)"
+              href="#"
+              >Login</a
+            >
+          </nav>
+        </div>
+        <div
+          id="mobileNavPanel"
+          class="mobile-nav-panel hidden border-t border-slate-200 bg-white md:hidden"
+          aria-hidden="true"
+        >
+          <div class="px-4 py-2">
+            <a class="mobile-nav-link" href="#">Personal</a>
+            <a class="mobile-nav-link" href="#">Corporate</a>
+            <button
+              type="button"
+              id="mobileBankingToggle"
+              class="mobile-nav-link flex w-full items-center justify-between border-0 bg-transparent text-left"
+              aria-expanded="false"
+              aria-controls="mobileBankingSub"
+            >
+              <span>Banking</span>
+              <i class="fas fa-chevron-down text-xs opacity-60 transition-transform" id="mobileBankingChevron" aria-hidden="true"></i>
+            </button>
+            <div id="mobileBankingSub" class="mobile-banking-sub hidden">
+              <a href="#cat-core-services" data-cat-scroll>Core services</a>
+              <a href="#cat-why-us" data-cat-scroll>Why choose us</a>
+              <a href="#cat-insights" data-cat-scroll>Market insights &amp; resources</a>
+            </div>
+            <a class="mobile-nav-link" href="#">Borrowing</a>
+            <a class="mobile-nav-link" href="#">Investing</a>
+            <a class="mobile-nav-link" href="#">Contact</a>
+            <a
+              class="mobile-nav-link rounded-lg text-center text-white"
+              style="background-color: var(--accent-green); border: none; margin-top: 8px"
+              href="#"
+              >Login</a
+            >
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <div id="home-flow-sections">
+          <section class="border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+            <div class="mx-auto grid max-w-6xl items-center gap-10 px-5 py-14 md:grid-cols-2 md:gap-14 md:px-8 md:py-20">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-widest text-accent-green">[[COLD_HERO_EYEBROW]]</p>
+                <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl lg:text-[2.65rem] lg:leading-tight">
+                  [[COLD_HERO_HEADING]]
+                </h1>
+                <p class="mt-5 text-lg leading-relaxed text-slate-600">
+                  [[COLD_HERO_PARAGRAPH_1]]
+                </p>
+                <p class="mt-4 text-sm leading-relaxed text-slate-600">
+                  [[COLD_HERO_PARAGRAPH_2]]
+                </p>
+                <button
+                  type="button"
+                  id="hero-explore-cta"
+                  class="mt-8 inline-flex items-center gap-2 rounded-full border-2 border-brand bg-white px-6 py-3 text-sm font-semibold text-brand shadow-sm transition hover:bg-slate-50"
+                >
+                  <span class="h-2 w-2 rounded-full" style="background-color: var(--accent-green)" aria-hidden="true"></span>
+                  [[INTENT_TRIGGER_TEXT]]
+                </button>
+              </div>
+              <div class="overflow-hidden rounded-2xl shadow-xl ring-1 ring-slate-200/80">
+                <img
+                  src="[[COLD_HERO_IMAGE_URL]]"
+                  alt=""
+                  class="h-full w-full object-cover md:min-h-[340px]"
+                  width="800"
+                  height="600"
+                  loading="eager"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section class="bg-white px-5 py-16 md:px-8 md:py-24">
+            <div class="mx-auto max-w-6xl">
+              <div class="text-center">
+                <h2 class="text-2xl font-bold md:text-3xl" style="color: var(--nav-ink)">Market Insights</h2>
+                <p class="mx-auto mt-3 max-w-2xl text-slate-600">
+                  [[HOME_INSIGHTS_SUBTITLE]]
+                </p>
+              </div>
+              <div class="mt-12 grid gap-8 md:grid-cols-3">
+                <article
+                  class="home-insight-card group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 transition-shadow duration-300 hover:shadow-md"
+                >
+                  <div class="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100">
+                    <img
+                      src="[[INSIGHT_IMG_1]]"
+                      alt=""
+                      width="900"
+                      height="563"
+                      loading="lazy"
+                      decoding="async"
+                      class="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-105"
+                    />
+                  </div>
+                  <div class="flex flex-1 flex-col p-6">
+                    <div class="mb-2 text-xs font-bold uppercase tracking-wide text-accent-green">[[HOME_INSIGHT_1_EYEBROW]]</div>
+                    <h3 class="text-lg font-semibold" style="color: var(--nav-ink)">[[HOME_INSIGHT_1_TITLE]]</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">
+                      [[HOME_INSIGHT_1_BODY]]
+                    </p>
+                  </div>
+                </article>
+                <article
+                  class="home-insight-card group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 transition-shadow duration-300 hover:shadow-md"
+                >
+                  <div class="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100">
+                    <img
+                      src="[[INSIGHT_IMG_2]]"
+                      alt=""
+                      width="900"
+                      height="563"
+                      loading="lazy"
+                      decoding="async"
+                      class="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-105"
+                    />
+                  </div>
+                  <div class="flex flex-1 flex-col p-6">
+                    <div class="mb-2 text-xs font-bold uppercase tracking-wide text-accent-green">[[HOME_INSIGHT_2_EYEBROW]]</div>
+                    <h3 class="text-lg font-semibold" style="color: var(--nav-ink)">[[HOME_INSIGHT_2_TITLE]]</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">
+                      [[HOME_INSIGHT_2_BODY]]
+                    </p>
+                  </div>
+                </article>
+                <article
+                  class="home-insight-card group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 transition-shadow duration-300 hover:shadow-md"
+                >
+                  <div class="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100">
+                    <img
+                      src="[[INSIGHT_IMG_3]]"
+                      alt=""
+                      width="900"
+                      height="563"
+                      loading="lazy"
+                      decoding="async"
+                      class="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-105"
+                    />
+                  </div>
+                  <div class="flex flex-1 flex-col p-6">
+                    <div class="mb-2 text-xs font-bold uppercase tracking-wide text-accent-green">[[HOME_INSIGHT_3_EYEBROW]]</div>
+                    <h3 class="text-lg font-semibold" style="color: var(--nav-ink)">[[HOME_INSIGHT_3_TITLE]]</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">
+                      [[HOME_INSIGHT_3_BODY]]
+                    </p>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <footer class="border-t border-slate-200 bg-slate-50 py-8 text-center text-xs text-slate-500">
+            <p>This is a demo site for Salesforce demo purposes only.</p>
+            <p class="mt-1">[[BRAND_NAME]] · Research, borrowing, and investing in one relationship</p>
+          </footer>
+        </div>
+
+        <div id="warm-homepage-section" class="hidden" aria-hidden="true">
+          <section class="border-b border-slate-200 bg-gradient-to-b from-slate-50 to-white">
+            <div class="mx-auto grid max-w-6xl items-center gap-10 px-5 py-14 md:grid-cols-2 md:gap-14 md:px-8 md:py-20">
+              <div>
+                <p class="text-xs font-bold uppercase tracking-widest" style="color: var(--brand)">Welcome back, [[CUSTOMER_FIRST_NAME]]</p>
+                <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-900 md:text-4xl lg:text-[2.65rem] lg:leading-tight">
+                  [[VANILLA_HERO_TITLE]]
+                </h1>
+                <p class="mt-5 text-lg leading-relaxed text-slate-600">
+                  [[VANILLA_HERO_SUBTEXT]]
+                </p>
+                <button
+                  type="button"
+                  class="mt-8 inline-flex items-center gap-2 rounded-full border-2 border-brand bg-white px-6 py-3 text-sm font-semibold text-brand shadow-sm transition hover:bg-slate-50"
+                  onclick="document.getElementById('resumeAdaptiveOptionsBtn').click()"
+                >
+                  <i class="fas fa-wand-magic-sparkles"></i>
+                  View your personalized options
+                </button>
+              </div>
+              <div class="overflow-hidden rounded-2xl shadow-xl ring-1 ring-slate-200/80">
+                <img
+                  src="[[ADAPTIVE_HERO_IMAGE_URL]]"
+                  alt="Personalized Hero"
+                  class="h-full w-full object-cover md:min-h-[340px]"
+                  width="800"
+                  height="600"
+                  loading="lazy"
+                />
+              </div>
+            </div>
+          </section>
+
+          <section class="bg-white px-5 py-16 md:px-8 md:py-24">
+            <div class="mx-auto max-w-6xl">
+              <div class="text-center">
+                <h2 class="text-2xl font-bold md:text-3xl" style="color: var(--nav-ink)">Market Insights</h2>
+                <p class="mx-auto mt-3 max-w-2xl text-slate-600">
+                  [[HOME_INSIGHTS_SUBTITLE]]
+                </p>
+              </div>
+              <div class="mt-12 grid gap-8 md:grid-cols-3">
+                <article class="home-insight-card group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 transition-shadow duration-300 hover:shadow-md">
+                  <div class="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100">
+                    <img src="[[WARM_INSIGHT_1_IMG]]" alt="" loading="lazy" class="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-105" />
+                  </div>
+                  <div class="flex flex-1 flex-col p-6">
+                    <div class="mb-2 text-xs font-bold uppercase tracking-wide" style="color: var(--brand)">[[WARM_INSIGHT_1_EYEBROW]]</div>
+                    <h3 class="text-lg font-semibold" style="color: var(--nav-ink)">[[WARM_INSIGHT_1_TITLE]]</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">[[WARM_INSIGHT_1_BODY]]</p>
+                  </div>
+                </article>
+                <article class="home-insight-card group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 transition-shadow duration-300 hover:shadow-md">
+                  <div class="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100">
+                    <img src="[[WARM_INSIGHT_2_IMG]]" alt="" loading="lazy" class="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-105" />
+                  </div>
+                  <div class="flex flex-1 flex-col p-6">
+                    <div class="mb-2 text-xs font-bold uppercase tracking-wide" style="color: var(--brand)">[[WARM_INSIGHT_2_EYEBROW]]</div>
+                    <h3 class="text-lg font-semibold" style="color: var(--nav-ink)">[[WARM_INSIGHT_2_TITLE]]</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">[[WARM_INSIGHT_2_BODY]]</p>
+                  </div>
+                </article>
+                <article class="home-insight-card group flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm ring-1 ring-slate-100 transition-shadow duration-300 hover:shadow-md">
+                  <div class="relative aspect-[16/10] w-full shrink-0 overflow-hidden bg-slate-100">
+                    <img src="[[WARM_INSIGHT_3_IMG]]" alt="" loading="lazy" class="h-full w-full object-cover transition duration-500 ease-out group-hover:scale-105" />
+                  </div>
+                  <div class="flex flex-1 flex-col p-6">
+                    <div class="mb-2 text-xs font-bold uppercase tracking-wide" style="color: var(--brand)">[[WARM_INSIGHT_3_EYEBROW]]</div>
+                    <h3 class="text-lg font-semibold" style="color: var(--nav-ink)">[[WARM_INSIGHT_3_TITLE]]</h3>
+                    <p class="mt-3 text-sm leading-relaxed text-slate-600">[[WARM_INSIGHT_3_BODY]]</p>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </section>
+
+          <footer class="border-t border-slate-200 bg-slate-50 py-8 text-center text-xs text-slate-500">
+            <p>This is a demo site for Salesforce demo purposes only.</p>
+            <p class="mt-1">[[BRAND_NAME]] · Research, borrowing, and investing in one relationship</p>
+          </footer>
+        </div>
+
+        <div id="categoryPageContainer" class="category-page-container" aria-hidden="true">
+          [[CATEGORY_PAGE_HTML]]
+        </div>
+        <div
+          id="resumeAdaptiveWrap"
+          class="hidden max-w-7xl mx-auto px-5 sm:px-8 md:px-14 lg:px-20 py-4 border-t border-gray-200 bg-slate-50/90 text-center"
+          role="region"
+          aria-label="Resume personalized options"
+        >
+          <button
+            type="button"
+            id="resumeAdaptiveOptionsBtn"
+            class="text-sm font-semibold text-[#008b7d] hover:text-teal-900 underline decoration-teal-600/40 underline-offset-2"
+          >
+            View personalized options again
+          </button>
+        </div>
+
+        <!-- Landing / conversion (simulated secure profile) — State 4, below sticky nav -->
+        <div id="landingPageContainer" class="landing-page-container" aria-hidden="true">
+          <div class="landing-page-wrapper">
+            <button type="button" id="closeLandingPage" class="close-landing-btn" aria-label="Close">
+              <i class="fas fa-times"></i>
+            </button>
+            <div class="landing-content">
+              <div class="landing-info">
+                <div class="landing-brand">[[BRAND_NAME]]</div>
+                <h1 class="landing-title">Secure your details</h1>
+                <p class="landing-subtitle">[[LANDING_PAGE_SUBTITLE]]</p>
+                <div class="landing-feature-item">
+                  <i class="fas fa-check-circle"></i>
+                  <span>Secure form — your information is used only to route this request.</span>
+                </div>
+                <div class="landing-feature-item">
+                  <i class="fas fa-check-circle"></i>
+                  <span>A specialist will follow up by phone or email.</span>
+                </div>
+                <div class="landing-feature-item">
+                  <i class="fas fa-check-circle"></i>
+                  <span>No payment details are collected on this page.</span>
+                </div>
+              </div>
+              <div class="landing-form-container">
+                <h2 class="form-title">Your information</h2>
+                <form id="contactForm" class="contact-form-lp" onsubmit="return false;">
+                  <div class="form-row-lp">
+                    <div class="form-group-lp">
+                      <label class="form-label-lp" for="firstName">First name *</label>
+                      <input type="text" id="firstName" class="form-input-lp" autocomplete="given-name" />
+                    </div>
+                    <div class="form-group-lp">
+                      <label class="form-label-lp" for="lastName">Last name *</label>
+                      <input type="text" id="lastName" class="form-input-lp" autocomplete="family-name" />
+                    </div>
+                  </div>
+                  <div class="form-group-lp">
+                    <label class="form-label-lp" for="email">Email *</label>
+                    <input type="email" id="email" class="form-input-lp" autocomplete="email" />
+                  </div>
+                  <div class="form-group-lp">
+                    <label class="form-label-lp" for="company">Company *</label>
+                    <input type="text" id="company" class="form-input-lp" autocomplete="organization" />
+                  </div>
+                  <div class="form-group-lp">
+                    <label class="form-label-lp" for="phone">Phone *</label>
+                    <input type="tel" id="phone" class="form-input-lp" autocomplete="tel" />
+                  </div>
+                  <div class="form-group-lp">
+                    <label class="form-label-lp" for="zipCode">ZIP code *</label>
+                    <input type="text" id="zipCode" class="form-input-lp" inputmode="numeric" autocomplete="postal-code" />
+                  </div>
+                  <button type="button" id="submitFormBtn" class="form-submit-btn-lp" disabled>
+                    <i class="fas fa-paper-plane"></i>
+                    Submit request
+                  </button>
+                  <p class="form-disclaimer-lp">
+                    Simulation only — by continuing you acknowledge this is a demo experience for
+                    [[BRAND_NAME]].
+                  </p>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <div id="chatWidget" class="chat-widget is-offstage">
+      <button type="button" id="chatToggleBtn" class="chat-toggle-btn" aria-label="Open chat">
+        <img src="[[AGENTFORCE_ICON_SRC]]" alt="" width="36" height="36" />
+        <span class="notification-badge" aria-hidden="true">1</span>
+      </button>
+
+      <div id="chatWindow" class="chat-window border border-slate-200" role="dialog" aria-label="Cumulus assistant chat">
+        <div class="chat-header">
+          <div class="flex min-w-0 flex-1 items-center">
+            <div class="chat-header-avatar-wrap">
+              <img src="[[AGENTFORCE_ICON_SRC]]" alt="" width="34" height="34" />
+            </div>
+            <div class="min-w-0">
+              <div class="chat-header-title">[[CHAT_WIDGET_TITLE]]</div>
+              <div class="chat-header-sub">
+                <span class="status-dot"></span>Always here to help
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1">
+            <button type="button" id="minimizeChatBtn" class="rounded-lg px-2 py-1 hover:bg-white/10" aria-label="Minimize">
+              <i class="fas fa-minus text-lg"></i>
+            </button>
+            <button type="button" id="closeChatBtn" class="rounded-lg px-2 py-1 hover:bg-white/10" aria-label="Close">
+              <i class="fas fa-times text-lg"></i>
+            </button>
+          </div>
+        </div>
+
+        <div id="chatMessages" class="chat-messages"></div>
+
+        <div class="chat-footer">
+          <input
+            type="text"
+            id="chatComposerInput"
+            class="chat-composer-input"
+            placeholder="Type your question…"
+            autocomplete="off"
+            aria-label="Message composer"
+          />
+          <div class="chat-footer-note">
+            <i class="fas fa-clock"></i>
+            <span>Typical response within a few minutes during business hours.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Premium adaptive grid overlay -->
+    <div id="adaptiveUIContainer" class="adaptive-ui-container" aria-hidden="true">
+      <div
+        id="adaptiveUIInner"
+        class="adaptive-ui-wrapper translate-y-10 opacity-0 transition-all duration-700 ease-in-out"
+      >
+        <div class="adaptive-header">
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-2xl md:text-3xl font-bold text-white leading-tight">
+                [[ADAPTIVE_OVERLAY_TITLE]]
+              </h2>
+              <p class="mt-3 text-white text-opacity-90 text-sm md:text-base max-w-3xl">
+                [[ADAPTIVE_OVERLAY_SUBTITLE]]
+              </p>
+            </div>
+            <button type="button" id="closeAdaptiveUI" class="close-adaptive-btn" aria-label="Close">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+        [[ADAPTIVE_CARDS_GRID_HTML]]
+        <div class="adaptive-footer">
+          <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+          <span>[[ADAPTIVE_FOOTER_NOTE]]</span>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <script>
+      var ADAPTIVE_AGENT_GREETING = [[AGENT_GREETING_JSON]];
+      var ADAPTIVE_AGENT_FOLLOWUP = [[AGENT_FOLLOWUP_JSON]];
+      var ADAPTIVE_USER_INTENT = [[USER_INTENT_JSON]];
+    </script>
+    <script>
+      (function () {
+        var chatWindow = document.getElementById("chatWindow");
+        var chatToggleBtn = document.getElementById("chatToggleBtn");
+        var chatMessages = document.getElementById("chatMessages");
+        var chatWidgetEl = document.getElementById("chatWidget");
+        var homeFlow = document.getElementById("home-flow-sections");
+        var categoryPage = document.getElementById("categoryPageContainer");
+        var warmHome = document.getElementById("warm-homepage-section");
+        var heroExplore = document.getElementById("hero-explore-cta");
+        var composerInput = document.getElementById("chatComposerInput");
+        var adaptive = document.getElementById("adaptiveUIContainer");
+        var landing = document.getElementById("landingPageContainer");
+        var iconImg = document.querySelector(".chat-header-avatar-wrap img");
+        var iconSrc = iconImg ? iconImg.src : "";
+        var landingTypeTimeout = null;
+        var LANDING_TYPE_MS = 2500;
+        var chatComposerFlowStarted = false;
+        var adaptationComplete = false;
+        var categoryChatGreetingSent = false;
+        var interactionComplete = false;
+        var SUBPAGE_CHAT_DELAY_MS = 2000;
+        var ADAPTATION_PAUSE_AFTER_AGENT_MS = 2500;
+        var AGENT_TYPING_INDICATOR_MS = 4500; // Longer thinking time for more realistic agent behavior
+
+        var demoCanvas = document.getElementById("demo-canvas");
+        var mobileNavToggle = document.getElementById("mobileNavToggle");
+        var mobileNavPanel = document.getElementById("mobileNavPanel");
+        var mobileBankingToggle = document.getElementById("mobileBankingToggle");
+        var mobileBankingSub = document.getElementById("mobileBankingSub");
+        var mobileBankingChevron = document.getElementById("mobileBankingChevron");
+        var lastNonChatSimulationState = 0;
+        var suppressWizardStateOnCloseChat = false;
+        var lastReportedSimulationState = 0;
+        var suppressSimulationReporting = false;
+        var adaptiveRestoringFromParent = false;
+
+        function buildAdaptiveSnapshot() {
+          return {
+            lastReportedState: lastReportedSimulationState,
+            lastNonChatSimulationState: lastNonChatSimulationState,
+            adaptationComplete: adaptationComplete,
+            interactionComplete: interactionComplete,
+            categoryChatGreetingSent: categoryChatGreetingSent,
+            chatComposerFlowStarted: chatComposerFlowStarted,
+            chatOpen: !!(chatWindow && chatWindow.classList.contains("show")),
+            overlayOpen: !!(adaptive && adaptive.classList.contains("show")),
+            landingOpen: !!(landing && landing.classList.contains("show")),
+            chatMessagesHtml: chatMessages ? chatMessages.innerHTML : "",
+            demoCanvasScrollTop: demoCanvas ? demoCanvas.scrollTop : 0,
+          };
+        }
+
+        function reportSimulationState(state) {
+          lastReportedSimulationState = state;
+          if (suppressSimulationReporting) return;
+          try {
+            if (window.parent && window.parent !== window) {
+              window.parent.postMessage(
+                {
+                  type: "adaptive-sim-state",
+                  state: state,
+                  snapshot: buildAdaptiveSnapshot(),
+                },
+                "*"
+              );
+            }
+          } catch (err) {}
+        }
+
+        function closeMobileNav() {
+          if (!mobileNavPanel) return;
+          mobileNavPanel.classList.add("hidden");
+          mobileNavPanel.setAttribute("aria-hidden", "true");
+          if (mobileNavToggle) {
+            mobileNavToggle.setAttribute("aria-expanded", "false");
+            mobileNavToggle.setAttribute("aria-label", "Open menu");
+          }
+        }
+
+        function hideAdaptiveOverlayCore() {
+          if (!adaptive) return;
+          var inner = document.getElementById("adaptiveUIInner");
+          if (inner) {
+            inner.classList.remove("translate-y-0", "opacity-100");
+            inner.classList.add("translate-y-10", "opacity-0");
+          }
+          var shell = document.getElementById("site-shell");
+          if (shell) {
+            shell.classList.remove("pointer-events-none", "opacity-40");
+          }
+          adaptive.classList.remove("show");
+          adaptive.setAttribute("aria-hidden", "true");
+          document.body.style.overflow = "";
+        }
+
+        function showState(stateIndex) {
+          if (!homeFlow || !categoryPage || !warmHome) return;
+          lastNonChatSimulationState = stateIndex;
+          suppressWizardStateOnCloseChat = true;
+          hideAdaptiveOverlayCore();
+          closeChat();
+          suppressWizardStateOnCloseChat = false;
+          if (chatWidgetEl) {
+            chatWidgetEl.classList.add("is-offstage");
+            chatWidgetEl.classList.remove("is-onstage");
+          }
+
+          homeFlow.classList.add("hidden");
+          homeFlow.setAttribute("aria-hidden", "true");
+          categoryPage.classList.remove("is-visible");
+          categoryPage.setAttribute("aria-hidden", "true");
+          warmHome.classList.add("hidden");
+          warmHome.setAttribute("aria-hidden", "true");
+
+          if (landing) {
+            landing.classList.remove("show");
+            landing.setAttribute("aria-hidden", "true");
+          }
+
+          var resumeWrap = document.getElementById("resumeAdaptiveWrap");
+          if (resumeWrap) resumeWrap.classList.add("hidden");
+
+          if (stateIndex === 0) {
+            homeFlow.classList.remove("hidden");
+            homeFlow.setAttribute("aria-hidden", "false");
+          } else if (stateIndex === 1) {
+            categoryPage.classList.add("is-visible");
+            categoryPage.setAttribute("aria-hidden", "false");
+            setTimeout(function () {
+              if (chatWidgetEl) {
+                chatWidgetEl.classList.remove("is-offstage");
+                chatWidgetEl.classList.add("is-onstage");
+              }
+            }, SUBPAGE_CHAT_DELAY_MS);
+            if (resumeWrap && adaptationComplete) resumeWrap.classList.remove("hidden");
+          } else if (stateIndex === 4 && landing) {
+            landing.classList.add("show");
+            landing.setAttribute("aria-hidden", "false");
+          } else if (stateIndex === 5) {
+            warmHome.classList.remove("hidden");
+            warmHome.setAttribute("aria-hidden", "false");
+            setTimeout(function () {
+              if (chatWidgetEl) {
+                chatWidgetEl.classList.remove("is-offstage");
+                chatWidgetEl.classList.add("is-onstage");
+              }
+            }, SUBPAGE_CHAT_DELAY_MS);
+            if (resumeWrap && adaptationComplete) resumeWrap.classList.remove("hidden");
+          }
+
+          if (demoCanvas && !adaptiveRestoringFromParent) {
+            demoCanvas.scrollTo({ top: 0, behavior: "smooth" });
+          }
+          reportSimulationState(stateIndex);
+        }
+
+        function openCategoryFlowFromNav() {
+          if (!categoryPage) return;
+          showState(1);
+          if (!interactionComplete) {
+            if (chatMessages) chatMessages.innerHTML = "";
+            adaptationComplete = false;
+            chatComposerFlowStarted = false;
+            categoryChatGreetingSent = false;
+          }
+        }
+
+        function goToCategorySection(sectionId) {
+          closeMobileNav();
+          var cat = document.getElementById("categoryPageContainer");
+          var wasVisible = cat && cat.classList.contains("is-visible");
+          if (!wasVisible) openCategoryFlowFromNav();
+          var delay = wasVisible ? 60 : 280;
+          setTimeout(function () {
+            var target = document.getElementById(sectionId);
+            var canvas = demoCanvas || document.getElementById("demo-canvas");
+            if (!target || !canvas) return;
+            var sticky = document.querySelector(".site-sticky-nav");
+            var offset = sticky ? sticky.getBoundingClientRect().height + 10 : 72;
+            var y = target.getBoundingClientRect().top + canvas.scrollTop - offset;
+            canvas.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+          }, delay);
+        }
+
+        if (mobileNavToggle && mobileNavPanel) {
+          mobileNavToggle.addEventListener("click", function (e) {
+            e.stopPropagation();
+            var opening = mobileNavPanel.classList.contains("hidden");
+            if (opening) {
+              mobileNavPanel.classList.remove("hidden");
+              mobileNavPanel.setAttribute("aria-hidden", "false");
+              mobileNavToggle.setAttribute("aria-expanded", "true");
+              mobileNavToggle.setAttribute("aria-label", "Close menu");
+            } else {
+              closeMobileNav();
+            }
+          });
+        }
+
+        if (mobileBankingToggle && mobileBankingSub) {
+          mobileBankingToggle.addEventListener("click", function (e) {
+            e.preventDefault();
+            var expanded = !mobileBankingSub.classList.contains("hidden");
+            if (expanded) {
+              mobileBankingSub.classList.add("hidden");
+              mobileBankingToggle.setAttribute("aria-expanded", "false");
+              if (mobileBankingChevron) mobileBankingChevron.style.transform = "";
+            } else {
+              mobileBankingSub.classList.remove("hidden");
+              mobileBankingToggle.setAttribute("aria-expanded", "true");
+              if (mobileBankingChevron) mobileBankingChevron.style.transform = "rotate(180deg)";
+            }
+          });
+        }
+
+        document.addEventListener("click", function (e) {
+          var link = e.target.closest("a[data-cat-scroll]");
+          if (!link) return;
+          var href = link.getAttribute("href");
+          if (!href || href.charAt(0) !== "#") return;
+          e.preventDefault();
+          goToCategorySection(href.slice(1));
+        });
+
+        document.addEventListener("click", function (e) {
+          if (!mobileNavPanel || mobileNavPanel.classList.contains("hidden")) return;
+          if (e.target.closest("#mobileNavToggle") || e.target.closest("#mobileNavPanel")) return;
+          closeMobileNav();
+        });
+
+        window.addEventListener("resize", function () {
+          if (window.matchMedia("(min-width: 768px)").matches) closeMobileNav();
+        });
+
+        function openChat() {
+          if (!chatWindow) return;
+          reportSimulationState("chat");
+          chatWindow.classList.remove("fade-out");
+          chatWindow.classList.add("show");
+          if (chatToggleBtn) chatToggleBtn.style.display = "none";
+          var badge = document.querySelector(".notification-badge");
+          if (badge) badge.style.display = "none";
+          if (composerInput) {
+            composerInput.disabled = false;
+            composerInput.value = "";
+          }
+          if (!adaptationComplete && !categoryChatGreetingSent) {
+            var greetOpen =
+              typeof ADAPTIVE_AGENT_GREETING === "string" ? ADAPTIVE_AGENT_GREETING : "";
+            if (greetOpen) addAgentBubble(greetOpen);
+            categoryChatGreetingSent = true;
+          }
+        }
+
+        function closeChat() {
+          if (!chatWindow) return;
+          chatWindow.classList.add("fade-out");
+          setTimeout(function () {
+            chatWindow.classList.remove("show", "fade-out");
+            if (chatToggleBtn) chatToggleBtn.style.display = "flex";
+          }, 260);
+          if (!suppressWizardStateOnCloseChat) {
+            reportSimulationState(lastNonChatSimulationState);
+          }
+        }
+
+        function scrollChat() {
+          if (!chatMessages) return;
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function addUserBubble(text) {
+          var row = document.createElement("div");
+          row.className = "message-bubble user-row";
+          row.innerHTML = '<div class="message-content"><div class="message-text"></div></div>';
+          row.querySelector(".message-text").textContent = text;
+          chatMessages.appendChild(row);
+          scrollChat();
+        }
+
+        function addTyping() {
+          // Random thinking messages for more engaging UX
+          var thinkingMessages = [
+            "✨ Analyzing your needs...",
+            "🔍 Finding the best options...",
+            "⚡ Working on it...",
+            "💡 Personalizing recommendations...",
+            "🎯 Tailoring solutions for you...",
+            "⏳ Gathering information..."
+          ];
+          var randomMessage = thinkingMessages[Math.floor(Math.random() * thinkingMessages.length)];
+
+          var el = document.createElement("div");
+          el.className = "typing-indicator";
+          el.id = "typing-indicator-el";
+          el.innerHTML =
+            '<span class="mr-2 text-xs font-medium text-slate-600">' + randomMessage + '</span>' +
+            '<span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>';
+          el.setAttribute("aria-label", "Agent is thinking");
+          chatMessages.appendChild(el);
+          scrollChat();
+        }
+
+        function removeTyping() {
+          var t = document.getElementById("typing-indicator-el");
+          if (t) t.remove();
+        }
+
+        function addAgentBubble(text) {
+          var row = document.createElement("div");
+          row.className = "message-bubble agent-row";
+          row.innerHTML =
+            '<div class="message-avatar"><img alt="" width="32" height="32"/></div>' +
+            '<div class="message-content"><div class="message-text"></div></div>';
+          row.querySelector("img").src = iconSrc;
+          row.querySelector(".message-text").textContent = text;
+          chatMessages.appendChild(row);
+          scrollChat();
+        }
+
+        function showAdaptiveOverlay() {
+          if (!adaptive) return;
+          var resumeWrap = document.getElementById("resumeAdaptiveWrap");
+          if (resumeWrap) resumeWrap.classList.add("hidden");
+          adaptive.classList.add("show");
+          adaptive.setAttribute("aria-hidden", "false");
+          document.body.style.overflow = "hidden";
+          var shell = document.getElementById("site-shell");
+          if (shell) {
+            shell.classList.add("pointer-events-none", "opacity-40");
+          }
+          var inner = document.getElementById("adaptiveUIInner");
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              if (inner) {
+                inner.classList.remove("translate-y-10", "opacity-0");
+                inner.classList.add("translate-y-0", "opacity-100");
+              }
+            });
+          });
+          reportSimulationState("overlay");
+        }
+
+        function hideAdaptiveOverlay() {
+          if (!adaptive) return;
+          hideAdaptiveOverlayCore();
+          if (!interactionComplete) {
+            showState(1);
+          } else {
+            showState(5);
+          }
+        }
+
+        function parseMockProfile() {
+          var raw = document.getElementById("adaptive-mock-profile");
+          if (!raw) return {};
+          try {
+            return JSON.parse(raw.textContent || "{}");
+          } catch (e) {
+            return {};
+          }
+        }
+
+        function clearLandingForm() {
+          var ids = ["firstName", "lastName", "email", "company", "phone", "zipCode"];
+          ids.forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+              el.value = "";
+              el.readOnly = true;
+            }
+          });
+          var submit = document.getElementById("submitFormBtn");
+          if (submit) {
+            submit.disabled = true;
+            submit.innerHTML = '<i class="fas fa-paper-plane"></i> Submit request';
+          }
+        }
+
+        function finishLandingTypeAnimation() {
+          ["firstName", "lastName", "email", "company", "phone", "zipCode"].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) el.readOnly = false;
+          });
+          var submit = document.getElementById("submitFormBtn");
+          if (submit) submit.disabled = false;
+        }
+
+        function runLandingTypeSimulation(profile) {
+          if (landingTypeTimeout) {
+            clearTimeout(landingTypeTimeout);
+            landingTypeTimeout = null;
+          }
+          var p = profile || {};
+          var fields = [
+            { id: "firstName", text: String(p.firstName != null ? p.firstName : "") },
+            { id: "lastName", text: String(p.lastName != null ? p.lastName : "") },
+            { id: "email", text: String(p.email != null ? p.email : "") },
+            { id: "company", text: String(p.company != null ? p.company : "") },
+            { id: "phone", text: String(p.phone != null ? p.phone : "") },
+            { id: "zipCode", text: String(p.zipCode != null ? p.zipCode : "") },
+          ];
+          var seq = [];
+          fields.forEach(function (f) {
+            for (var i = 0; i < f.text.length; i++) {
+              seq.push({ id: f.id, ch: f.text.charAt(i) });
+            }
+          });
+          if (seq.length === 0) {
+            finishLandingTypeAnimation();
+            return;
+          }
+          var delay = LANDING_TYPE_MS / seq.length;
+          var i = 0;
+          function step() {
+            if (i >= seq.length) {
+              landingTypeTimeout = null;
+              finishLandingTypeAnimation();
+              return;
+            }
+            var item = seq[i];
+            var el = document.getElementById(item.id);
+            if (el) el.value = (el.value || "") + item.ch;
+            i++;
+            landingTypeTimeout = setTimeout(step, delay);
+          }
+          step();
+        }
+
+        function openLanding() {
+          if (!landing) return;
+          clearLandingForm();
+          interactionComplete = true;
+          showState(4);
+          runLandingTypeSimulation(parseMockProfile());
+        }
+
+        function closeLanding() {
+          if (landingTypeTimeout) {
+            clearTimeout(landingTypeTimeout);
+            landingTypeTimeout = null;
+          }
+          showState(5);
+        }
+
+        function finishChatToAdaptive(userBubbleText) {
+          addUserBubble(userBubbleText);
+          addTyping();
+          setTimeout(function () {
+            removeTyping();
+            var reply =
+              typeof ADAPTIVE_AGENT_FOLLOWUP === "string" ? ADAPTIVE_AGENT_FOLLOWUP : "";
+            if (reply) addAgentBubble(reply);
+            adaptationComplete = true;
+            setTimeout(function () {
+              showAdaptiveOverlay();
+            }, ADAPTATION_PAUSE_AFTER_AGENT_MS);
+          }, AGENT_TYPING_INDICATOR_MS);
+        }
+
+        function runComposerSimulatedTyping() {
+          var text = typeof ADAPTIVE_USER_INTENT === "string" ? ADAPTIVE_USER_INTENT : "";
+          if (!composerInput) return;
+          if (!text) {
+            composerInput.disabled = false;
+            return;
+          }
+          composerInput.disabled = true;
+          var i = 0;
+          var charDelay = Math.max(18, Math.min(48, Math.floor(2000 / Math.max(text.length, 1))));
+          composerInput.value = "";
+          function typeStep() {
+            if (i >= text.length) {
+              setTimeout(function () {
+                composerInput.value = "";
+                finishChatToAdaptive(text);
+              }, 500);
+              return;
+            }
+            composerInput.value += text.charAt(i);
+            i += 1;
+            setTimeout(typeStep, charDelay);
+          }
+          typeStep();
+        }
+
+        if (heroExplore && homeFlow && categoryPage && chatWidgetEl) {
+          heroExplore.addEventListener("click", function () {
+            showState(1);
+            if (chatMessages) chatMessages.innerHTML = "";
+            adaptationComplete = false;
+            chatComposerFlowStarted = false;
+            categoryChatGreetingSent = false;
+          });
+        }
+
+        var navHomeLogoLink = document.getElementById("navHomeLogoLink");
+        if (navHomeLogoLink) {
+          navHomeLogoLink.addEventListener("click", function (e) {
+            e.preventDefault();
+            if (interactionComplete) {
+              showState(5);
+            } else {
+              showState(0);
+            }
+          });
+        }
+
+        if (chatToggleBtn) chatToggleBtn.addEventListener("click", openChat);
+        var closeChatBtn = document.getElementById("closeChatBtn");
+        if (closeChatBtn) closeChatBtn.addEventListener("click", closeChat);
+        var minimizeChatBtn = document.getElementById("minimizeChatBtn");
+        if (minimizeChatBtn) minimizeChatBtn.addEventListener("click", closeChat);
+
+        if (composerInput) {
+          composerInput.addEventListener("click", function () {
+            if (adaptationComplete) return;
+            if (chatComposerFlowStarted) return;
+            if (!chatWidgetEl || !chatWidgetEl.classList.contains("is-onstage")) return;
+            if (!chatWindow || !chatWindow.classList.contains("show")) return;
+            chatComposerFlowStarted = true;
+            composerInput.disabled = true;
+            runComposerSimulatedTyping();
+          });
+        }
+
+        var closeAdaptiveUIBtn = document.getElementById("closeAdaptiveUI");
+        if (closeAdaptiveUIBtn) closeAdaptiveUIBtn.addEventListener("click", hideAdaptiveOverlay);
+        var resumeAdaptiveBtn = document.getElementById("resumeAdaptiveOptionsBtn");
+        if (resumeAdaptiveBtn) {
+          resumeAdaptiveBtn.addEventListener("click", function () {
+            showAdaptiveOverlay();
+          });
+        }
+        if (adaptive) {
+          adaptive.addEventListener("click", function (e) {
+            if (e.target === adaptive) hideAdaptiveOverlay();
+            var btn = e.target.closest(".card-cta-btn");
+            if (btn) {
+              e.preventDefault();
+              hideAdaptiveOverlayCore();
+              setTimeout(openLanding, 280);
+            }
+          });
+        }
+
+        var closeLandingBtn = document.getElementById("closeLandingPage");
+        if (closeLandingBtn) {
+          closeLandingBtn.addEventListener("click", function () {
+            closeLanding();
+          });
+        }
+        var submitFormBtn = document.getElementById("submitFormBtn");
+        if (submitFormBtn) {
+          submitFormBtn.addEventListener("click", function () {
+            if (submitFormBtn.disabled) return;
+            interactionComplete = true;
+            submitFormBtn.textContent = "Request sent — we'll be in touch";
+            submitFormBtn.disabled = true;
+            setTimeout(function () {
+              closeLanding();
+            }, 900);
+          });
+        }
+
+        function restoreSimulationState(snap) {
+          if (!snap) return;
+          if (adaptiveRestoringFromParent) return;
+          adaptiveRestoringFromParent = true;
+          suppressSimulationReporting = true;
+          var finalReportState =
+            snap.lastReportedState !== undefined && snap.lastReportedState !== null
+              ? snap.lastReportedState
+              : 0;
+          try {
+            hideAdaptiveOverlayCore();
+            if (chatWindow) {
+              chatWindow.classList.remove("fade-out", "show");
+              if (chatToggleBtn) chatToggleBtn.style.display = "flex";
+            }
+
+            adaptationComplete = !!snap.adaptationComplete;
+            interactionComplete = !!snap.interactionComplete;
+            categoryChatGreetingSent = !!snap.categoryChatGreetingSent;
+            chatComposerFlowStarted = !!snap.chatComposerFlowStarted;
+
+            var lnc = snap.lastNonChatSimulationState;
+            if (typeof lnc === "string" && /^\d+$/.test(lnc)) lnc = parseInt(lnc, 10);
+            if (typeof lnc !== "number" || isNaN(lnc)) lnc = null;
+
+            var lr = snap.lastReportedState;
+            var base = lnc != null ? lnc : 0;
+
+            if (snap.landingOpen) {
+              base = 4;
+            } else if (lr === 5 || lr === "5") {
+              base = 5;
+            } else if (lr === 0 || lr === "0") {
+              base = 0;
+            } else if (
+              lr === 1 ||
+              lr === "1" ||
+              lr === "chat" ||
+              lr === "overlay" ||
+              snap.overlayOpen ||
+              snap.chatOpen
+            ) {
+              base = 1;
+            }
+
+            showState(base);
+
+            if (snap.chatOpen && chatMessages) {
+              chatMessages.innerHTML = "";
+              if (snap.adaptationComplete) {
+                var greetR = typeof ADAPTIVE_AGENT_GREETING === "string" ? ADAPTIVE_AGENT_GREETING : "";
+                var uiR = typeof ADAPTIVE_USER_INTENT === "string" ? ADAPTIVE_USER_INTENT : "";
+                var fuR = typeof ADAPTIVE_AGENT_FOLLOWUP === "string" ? ADAPTIVE_AGENT_FOLLOWUP : "";
+                if (greetR) addAgentBubble(greetR);
+                if (uiR) addUserBubble(uiR);
+                if (fuR) addAgentBubble(fuR);
+              } else if (snap.categoryChatGreetingSent) {
+                var greetOnly = typeof ADAPTIVE_AGENT_GREETING === "string" ? ADAPTIVE_AGENT_GREETING : "";
+                if (greetOnly) addAgentBubble(greetOnly);
+              }
+            }
+
+            if (snap.chatOpen && chatWindow) {
+              chatWindow.classList.add("show");
+              chatWindow.classList.remove("fade-out");
+              if (chatToggleBtn) chatToggleBtn.style.display = "none";
+              var badgeRestore = document.querySelector(".notification-badge");
+              if (badgeRestore) badgeRestore.style.display = "none";
+              if (composerInput) {
+                composerInput.value = "";
+                composerInput.disabled = adaptationComplete ? false : !!snap.chatComposerFlowStarted;
+              }
+            }
+
+            if (snap.overlayOpen) {
+              showAdaptiveOverlay();
+            }
+
+            if ((snap.chatOpen || snap.overlayOpen) && chatWidgetEl) {
+              chatWidgetEl.classList.remove("is-offstage");
+              chatWidgetEl.classList.add("is-onstage");
+            }
+
+            if (typeof snap.demoCanvasScrollTop === "number" && demoCanvas) {
+              requestAnimationFrame(function () {
+                demoCanvas.scrollTop = snap.demoCanvasScrollTop;
+              });
+            }
+
+            finalReportState =
+              snap.lastReportedState !== undefined && snap.lastReportedState !== null
+                ? snap.lastReportedState
+                : base;
+          } finally {
+            adaptiveRestoringFromParent = false;
+            suppressSimulationReporting = false;
+            reportSimulationState(finalReportState);
+          }
+        }
+
+        window.addEventListener("message", function (e) {
+          if (!e.data || e.data.type !== "adaptive-restore-state") return;
+          restoreSimulationState(e.data.snapshot);
+        });
+
+        reportSimulationState(0);
+      })();
+    </script>
+  </body>
+</html>
