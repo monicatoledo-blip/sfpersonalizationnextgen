@@ -1,19 +1,32 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SP Demo Builder</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <header class="app-header">
-    <div class="brand">
-      <img src="/images/logo-default.png" alt="Cumulus" />
-      <span>SP Demo Builder</span>
+  <header>
+    <div class="header-content">
+      <img
+        src="https://image.s4.sfmc-content.com/lib/fe3111727664047b741079/m/1/ccb17401-00ab-42c3-b141-7a1b93f23360.png"
+        alt="Cumulus Financial"
+        class="header-logo"
+      />
+      <div class="header-text">
+        <h1>SP Demo Builder</h1>
+        <p>Spin up a live Salesforce Personalization web demo in a connected SDO</p>
+      </div>
     </div>
-    <div class="header-controls" id="headerControls"></div>
   </header>
+
+  <section class="component-control-bar">
+    <div class="control-bar-content">
+      <div class="control-bar-left" id="navControls"></div>
+      <div class="control-bar-right" id="headerControls"></div>
+    </div>
+  </section>
 
   <main id="app"><!-- rendered by script.js --></main>
 

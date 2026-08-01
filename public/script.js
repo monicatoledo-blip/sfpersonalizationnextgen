@@ -84,6 +84,7 @@ async function boot() {
 // --- sign-in gate ---
 function renderSignIn() {
   $('#headerControls').innerHTML = '';
+  $('#navControls').innerHTML = '';
   const authErr = qs('auth_error');
   const app = $('#app');
   app.innerHTML = '';
@@ -102,6 +103,7 @@ function renderSignIn() {
   if (authErr) clearQuery();
 }
 
+// Right side of the control bar: signed-in email + sign out.
 function renderHeaderControls() {
   const controls = $('#headerControls');
   controls.innerHTML = '';
@@ -112,6 +114,26 @@ function renderHeaderControls() {
   );
 }
 
+// Left side of the control bar: primary nav tabs (only once an org is connected).
+function renderNavControls() {
+  const nav = $('#navControls');
+  nav.innerHTML = '';
+  if (!state.me || !state.connections.length) return;
+  const items = [
+    ['newDemo', 'New Demo'],
+    ['manageDemos', 'Manage Demos'],
+    ['connectedOrgs', 'Connected Orgs'],
+  ];
+  items.forEach(([route, label]) => {
+    nav.appendChild(
+      el('button', {
+        class: 'nav-tab' + (state.route === route ? ' active' : ''),
+        onclick: () => { state.route = route; renderApp(); },
+      }, label)
+    );
+  });
+}
+
 async function logout() {
   try { await api('POST', '/auth/logout'); } catch {}
   location.href = '/';
@@ -120,6 +142,7 @@ async function logout() {
 // --- main app shell ---
 function renderApp({ banner } = {}) {
   renderHeaderControls();
+  renderNavControls();
   const app = $('#app');
   app.innerHTML = '';
 
@@ -129,35 +152,11 @@ function renderApp({ banner } = {}) {
     return;
   }
 
-  const layout = el('div', { class: 'layout' });
-  layout.appendChild(renderSideNav());
-  const main = el('div', { class: 'main' });
-  if (banner) main.appendChild(el('div', { class: 'banner ' + banner.type }, banner.msg));
+  if (banner) app.appendChild(el('div', { class: 'banner ' + banner.type }, banner.msg));
 
-  if (state.route === 'newDemo') main.appendChild(renderNewDemo());
-  else if (state.route === 'manageDemos') main.appendChild(renderManageDemos());
-  else if (state.route === 'connectedOrgs') main.appendChild(renderConnectedOrgs());
-
-  layout.appendChild(main);
-  app.appendChild(layout);
-}
-
-function renderSideNav() {
-  const nav = el('div', { class: 'sidenav' });
-  const items = [
-    ['newDemo', 'New Demo'],
-    ['manageDemos', 'Manage Demos'],
-    ['connectedOrgs', 'Connected Orgs'],
-  ];
-  items.forEach(([route, label]) => {
-    nav.appendChild(
-      el('button', {
-        class: state.route === route ? 'active' : '',
-        onclick: () => { state.route = route; renderApp(); },
-      }, label)
-    );
-  });
-  return nav;
+  if (state.route === 'newDemo') app.appendChild(renderNewDemo());
+  else if (state.route === 'manageDemos') app.appendChild(renderManageDemos());
+  else if (state.route === 'connectedOrgs') app.appendChild(renderConnectedOrgs());
 }
 
 // --- Connect SDO ---
