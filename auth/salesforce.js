@@ -55,6 +55,7 @@ async function exchangeCode({ loginUrl, code, verifier }) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+    signal: AbortSignal.timeout(10000),
   });
   const json = await resp.json().catch(() => ({}));
   if (!resp.ok) {

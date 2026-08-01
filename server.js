@@ -23,7 +23,13 @@ app.use(express.urlencoded({ extended: true }));
 // --- Sessions (Postgres-backed) ---
 app.use(
   session({
-    store: new PgSession({ pool: db.pool, tableName: 'session', createTableIfMissing: true }),
+    store: new PgSession({
+      pool: db.pool,
+      tableName: 'session',
+      createTableIfMissing: true,
+      disableTouch: true, // don't rewrite the session row on every GET
+      pruneSessionInterval: 60 * 15, // prune every 15 min, not per-request
+    }),
     secret: process.env.SESSION_SECRET || 'dev-insecure-secret-change-me',
     resave: false,
     saveUninitialized: false,

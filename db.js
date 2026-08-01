@@ -12,6 +12,14 @@ const useSSL = /(amazonaws\.com|herokuapp\.com|\.render\.com)/.test(process.env.
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: useSSL ? { rejectUnauthorized: false } : false,
+  max: 10,
+  // Bound every stage so one bad connection can't hang the whole pool and
+  // stall unrelated requests (session middleware reads the DB per request).
+  connectionTimeoutMillis: 5000, // give up acquiring a connection
+  idleTimeoutMillis: 30000, // release idle clients
+  statement_timeout: 10000, // server-side kill of a slow query
+  query_timeout: 10000, // client-side kill of a slow query
+  keepAlive: true,
 });
 
 pool.on('error', (err) => {
