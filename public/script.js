@@ -88,8 +88,16 @@ function renderSignIn() {
   const authErr = qs('auth_error');
   const app = $('#app');
   app.innerHTML = '';
+  const arrivedDirect = !qs('config');
   app.appendChild(
     el('div', { class: 'centered-gate' }, [
+      arrivedDirect
+        ? el('div', { class: 'banner info' }, [
+            el('strong', {}, 'Start in the Experience Generator. '),
+            el('span', {}, 'This tool takes a demo you designed there and makes it live in an SDO. '),
+            el('a', { href: EXPERIENCE_GENERATOR_URL, target: '_blank' }, 'Open the Experience Generator →'),
+          ])
+        : null,
       el('div', { class: 'card' }, [
         el('h2', {}, 'Sign in'),
         el('p', { class: 'muted' }, 'Internal tool for Salesforce SEs. Sign in with your @salesforce.com Google account.'),
@@ -160,31 +168,34 @@ function renderApp({ banner } = {}) {
 }
 
 // --- Connect SDO ---
+const EXPERIENCE_GENERATOR_URL = 'https://whispering-coast-03303-5bb1f6fb1c95.herokuapp.com';
+
 function renderConnectSdo() {
-  let sandbox = false;
   const wrap = el('div', { class: 'centered-gate' });
+
+  // Callout: this app is meant to be reached from the Experience Generator,
+  // where the SE first designs the experience. Direct visitors get pointed back.
+  const arrivedDirect = !qs('config');
+  if (arrivedDirect) {
+    wrap.appendChild(
+      el('div', { class: 'banner info' }, [
+        el('strong', {}, 'Start in the Experience Generator. '),
+        el('span', {}, 'Design your experience there first, then use “Connect to SDO for Live Demo” to bring it here with everything pre-filled. '),
+        el('a', { href: EXPERIENCE_GENERATOR_URL, target: '_blank' }, 'Open the Experience Generator →'),
+      ])
+    );
+  }
+
   const card = el('div', { class: 'card' }, [
     el('h2', {}, 'Connect Your SDO'),
-    el('p', { class: 'muted' }, 'Connect a Salesforce org (SDO) with Data Cloud + Personalization enabled. The app deploys the demo objects into this org.'),
+    el('p', { class: 'muted' }, 'Connect a Salesforce SDO with Data Cloud + Personalization enabled. The app deploys the demo objects into this org.'),
   ]);
-  const sandboxRow = el('label', { class: 'small' }, [
-    (() => {
-      const cb = el('input', { type: 'checkbox' });
-      cb.style.width = 'auto';
-      cb.style.minHeight = '0';
-      cb.style.marginRight = '0.5rem';
-      cb.addEventListener('change', (e) => { sandbox = e.target.checked; });
-      return cb;
-    })(),
-    'This is a sandbox (test.salesforce.com)',
-  ]);
-  card.appendChild(sandboxRow);
   card.appendChild(
     el('div', { style: 'margin-top:1rem' }, [
       el('a', {
         class: 'btn',
         href: '#',
-        onclick: (e) => { e.preventDefault(); location.href = '/auth/salesforce?sandbox=' + sandbox; },
+        onclick: (e) => { e.preventDefault(); location.href = '/auth/salesforce'; },
       }, 'Connect to Salesforce'),
     ])
   );
