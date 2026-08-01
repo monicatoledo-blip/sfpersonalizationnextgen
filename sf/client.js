@@ -22,10 +22,18 @@ function connectionFromRow(row) {
     version: API_VERSION,
   });
 
-  // Persist refreshed access tokens so future requests reuse them.
-  conn.on('refresh', (accessToken) => {
-    db.updateSfConnectionAccessToken(row.id, encrypt(accessToken)).catch((err) =>
-      console.error('[sf/client] failed to persist refreshed token', err)
+  // Persist refreshed tokens. The org enforces refresh-token rotation, so each
+  // refresh returns a NEW refresh token (in `res.refresh_token`) and invalidates
+  // the old one — we must store it and update the in-memory connection, or the
+  // next refresh fails. `res` is the full token response from jsforce.
+  conn.on('refresh', (accessToken, res) => {
+    const fields = { access_token_enc: encrypt(accessToken) };
+    if (res && res.refresh_token) {
+      conn.refreshToken = res.refresh_token; // keep in-memory conn valid
+      fields.refresh_token_enc = encrypt(res.refresh_token);
+    }
+    db.updateSfConnectionTokens(row.id, fields).catch((err) =>
+      console.error('[sf/client] failed to persist refreshed token(s)', err)
     );
   });
 

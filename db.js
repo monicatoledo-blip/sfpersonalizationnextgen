@@ -149,6 +149,23 @@ async function updateSfConnectionAccessToken(id, accessTokenEnc) {
   ]);
 }
 
+// Update one or both encrypted tokens. `fields` may contain access_token_enc
+// and/or refresh_token_enc (refresh-token rotation stores both).
+async function updateSfConnectionTokens(id, fields) {
+  const sets = [];
+  const vals = [];
+  let i = 1;
+  for (const col of ['access_token_enc', 'refresh_token_enc']) {
+    if (fields[col] !== undefined) {
+      sets.push(`${col} = $${i++}`);
+      vals.push(fields[col]);
+    }
+  }
+  if (!sets.length) return;
+  vals.push(id);
+  await pool.query(`UPDATE sf_connections SET ${sets.join(', ')} WHERE id = $${i}`, vals);
+}
+
 async function deleteSfConnection(userId, id) {
   const { rowCount } = await pool.query(
     'DELETE FROM sf_connections WHERE id = $1 AND user_id = $2',
@@ -250,6 +267,7 @@ module.exports = {
   listSfConnections,
   getSfConnection,
   updateSfConnectionAccessToken,
+  updateSfConnectionTokens,
   deleteSfConnection,
   createDeployment,
   listDeployments,
