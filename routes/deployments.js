@@ -37,7 +37,7 @@ function expiresAtFrom(presetKey) {
 // POST /api/deployments
 router.post('/', async (req, res, next) => {
   try {
-    const { name, industry, formData, connectionId, expiry, tenantId } = req.body || {};
+    const { name, industry, formData, connectionId, expiry, tenantId, uploadedHtml } = req.body || {};
     if (!name || !connectionId) {
       return res.status(400).json({ error: 'name and connectionId are required' });
     }
@@ -45,9 +45,24 @@ router.post('/', async (req, res, next) => {
     const connRow = await db.getSfConnection(req.user.id, connectionId);
     if (!connRow) return res.status(404).json({ error: 'connection_not_found' });
 
-    // 1. Build the HTML from the config, inject the SDK/sitemap.
-    const rendered = build.render(formData || {});
-    const generatedHtml = injectSdk(rendered, { tenantId });
+    // 1. Source the HTML. Either the SE brought their own downloaded file
+    //    (uploadedHtml) or we render it from the form config. Downloaded files
+    //    from the Experience Generator are self-contained and have the content
+    //    zone surfaces but NOT the Data Cloud SDK, so we inject the SDK either way.
+    let baseHtml;
+    if (uploadedHtml && uploadedHtml.trim()) {
+      if (!/warm-homepage-section|floating-cards-container|cat-hero/.test(uploadedHtml)) {
+        return res.status(400).json({
+          error: 'uploaded_html_missing_zones',
+          detail:
+            'This file does not look like an Adaptive Web export — the expected content zones were not found. Upload the HTML downloaded from the Experience Generator’s Adaptive Web experience.',
+        });
+      }
+      baseHtml = uploadedHtml;
+    } else {
+      baseHtml = build.render(formData || {});
+    }
+    const generatedHtml = injectSdk(baseHtml, { tenantId });
 
     // 2. Create SP objects in the SDO (gated — see sf/deploy.js). We capture
     //    whatever the deployer returns into sf_artifacts.

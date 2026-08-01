@@ -219,6 +219,9 @@ async function loadCatalog() {
   return _catalog;
 }
 
+// Holds an uploaded HTML file's contents when the SE brings their own export.
+let _uploadedHtml = null;
+
 function activeConnection() {
   return state.connections.find((c) => c.id === state.activeConnectionId) || state.connections[0];
 }
@@ -257,7 +260,38 @@ function renderNewDemo() {
     ])
   );
 
-  const statusArea = el('div', { style: 'margin-top:1.25rem' });
+  // Optional: bring your own downloaded HTML instead of using the form config.
+  _uploadedHtml = null;
+  const uploadStatus = el('div', { class: 'small muted', style: 'margin-top:0.5rem' });
+  const fileInput = el('input', { type: 'file', accept: '.html,text/html', style: 'padding:0.5rem' });
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) { _uploadedHtml = null; uploadStatus.textContent = ''; return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      _uploadedHtml = String(reader.result || '');
+      const ok = /warm-homepage-section|floating-cards-container|cat-hero/.test(_uploadedHtml);
+      uploadStatus.className = ok ? 'small' : 'banner error small';
+      uploadStatus.style.marginTop = '0.5rem';
+      uploadStatus.textContent = ok
+        ? `Using uploaded file: ${file.name} (${Math.round(_uploadedHtml.length / 1024)} KB). Form fields above are ignored.`
+        : `“${file.name}” doesn’t look like an Adaptive Web export (content zones not found). It won’t work as a live demo.`;
+      if (!ok) _uploadedHtml = null;
+    };
+    reader.readAsText(file);
+  });
+  form.appendChild(
+    el('details', { style: 'margin-top:1.25rem' }, [
+      el('summary', { style: 'cursor:pointer; font-weight:600; font-size:14px; color:#2a94d6' },
+        'Have a downloaded HTML file? Upload it instead'),
+      el('p', { class: 'small muted', style: 'margin:0.5rem 0' },
+        'Use the HTML you downloaded from the Experience Generator’s Adaptive Web experience. We host it as-is and inject the Data Cloud SDK + content zones. When a file is uploaded, the form fields above are ignored.'),
+      fileInput,
+      uploadStatus,
+    ])
+  );
+
+  const statusArea = el('div', { id: 'deployStatus', style: 'margin-top:1.25rem' });
   const deployBtn = el('button', { class: 'btn', onclick: () => runDeploy() },
     'Deploy to ' + (conn ? (conn.org_alias || conn.org_id) : 'org'));
   form.appendChild(el('div', { style: 'margin-top:1.5rem' }, [deployBtn]));
@@ -314,12 +348,13 @@ async function runPrereqCheck(card, conn) {
 async function runDeploy() {
   const conn = activeConnection();
   const name = $('#demoName').value.trim();
-  const statusArea = $('#demoName').closest('.card').querySelector('div[style*="margin-top:1.25rem"]');
+  const statusArea = $('#deployStatus');
   if (!name) {
     statusArea.innerHTML = '';
     statusArea.appendChild(el('div', { class: 'banner error' }, 'Demo name is required.'));
     return;
   }
+  const usingUpload = !!_uploadedHtml;
   const formData = {
     adaptiveBrandName: $('#brandName').value,
     adaptiveWebSubIndustry: $('#industrySel').value,
@@ -341,6 +376,7 @@ async function runDeploy() {
       connectionId: conn.id,
       industry: formData.adaptiveWebSubIndustry,
       formData,
+      uploadedHtml: usingUpload ? _uploadedHtml : undefined,
       expiry: 'never',
     });
     steps.forEach((_, i) => setStep(i, 'done'));

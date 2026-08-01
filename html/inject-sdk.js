@@ -53,8 +53,10 @@ ${beacon}
 }
 
 // Insert the snippet just before </head>. Falls back to prepending to <body>
-// if no </head> is present.
+// if no </head> is present. Idempotent: if this app's sitemap init is already
+// present (e.g. re-uploading a file we produced), return the HTML unchanged.
 function injectSdk(html, opts = {}) {
+  if (/SalesforceInteractions\.init/.test(html)) return html;
   const snippet = buildSnippet(opts);
   if (/<\/head>/i.test(html)) {
     return html.replace(/<\/head>/i, `${snippet}\n</head>`);
