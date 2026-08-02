@@ -19,6 +19,7 @@
 
 const p13n = require('./p13n');
 const { getMergedAdaptiveStory } = require('../data/generator');
+const { extractHeroContent } = require('../html/extract');
 
 const DEFAULT_DATA_SPACE = 'default';
 
@@ -104,23 +105,50 @@ function heroSubstitutionDefinitions() {
   return defs;
 }
 
-// Build the personalized-hero attribute values from the simulator form config.
-// The "after" (personalized) state = the warm hero image + headline the page
-// renders; images are Cloudinary URLs stored as-is. Falls back gracefully when
-// the demo was created from an uploaded file (no formData).
-function heroDecisionAttributeValues(formData) {
-  const fd = formData || {};
-  const story = (() => {
-    try {
-      return getMergedAdaptiveStory(fd) || {};
-    } catch (_) {
-      return {};
+// Build the personalized-hero attribute values. Prefer content EXTRACTED from
+// the uploaded/rendered HTML (the warm "Welcome back" hero the sim renders after
+// form-fill) so the WPM swap shows the real creative; fall back to the form
+// config when there's no HTML. Images are Cloudinary URLs stored as-is.
+function heroDecisionAttributeValues(formData, uploadedHtml) {
+  let image = '';
+  let header = '';
+  let subheader = '';
+  let cta = '';
+
+  // 1) Preferred: extract from the uploaded HTML's personalized hero.
+  const hero = uploadedHtml ? extractHeroContent(uploadedHtml) : null;
+  if (hero) {
+    image = (hero.image || '').trim();
+    header = (hero.header || '').trim();
+    subheader = (hero.subheader || '').trim();
+    cta = (hero.cta || '').trim();
+    // The personalized greeting ("Welcome back, <name>") is the payoff of the
+    // swap — keep it by prefixing the header (the transformer renders Header +
+    // Subheader + image, no separate eyebrow slot).
+    const eyebrow = (hero.eyebrow || '').trim();
+    if (eyebrow && header && !header.toLowerCase().includes(eyebrow.toLowerCase())) {
+      header = `${eyebrow} — ${header}`;
+    } else if (eyebrow && !header) {
+      header = eyebrow;
     }
-  })();
-  const image = String(fd.adaptiveHeroImageUrl || fd.adaptiveColdHeroUrl || '').trim();
-  const header = String(story.landingPageTitle || story.vanillaHeroTitle || '').trim();
-  const subheader = String(story.landingPageSubtitle || story.vanillaHeroSubtext || '').trim();
-  const cta = String(story.homepageCtaText || story.intentTriggerText || 'Learn more').trim();
+  }
+
+  // 2) Fallback: form-config path (when a demo is built via the form).
+  if (!image && !header) {
+    const fd = formData || {};
+    const story = (() => {
+      try {
+        return getMergedAdaptiveStory(fd) || {};
+      } catch (_) {
+        return {};
+      }
+    })();
+    image = image || String(fd.adaptiveHeroImageUrl || fd.adaptiveColdHeroUrl || '').trim();
+    header = header || String(story.landingPageTitle || story.vanillaHeroTitle || '').trim();
+    subheader = subheader || String(story.landingPageSubtitle || story.vanillaHeroSubtext || '').trim();
+    cta = cta || String(story.homepageCtaText || story.intentTriggerText || 'Learn more').trim();
+  }
+
   const values = [
     { attributeName: 'BackgroundImageUrl', value: image },
     { attributeName: 'Header', value: header },
@@ -132,13 +160,13 @@ function heroDecisionAttributeValues(formData) {
 
 // Decisions per PP. Homepage hero gets the personalized content; the other two
 // get a single fallback decision so WPM has something to bind.
-function decisionsFor(ppKey, demoName, formData) {
+function decisionsFor(ppKey, demoName, formData, uploadedHtml) {
   if (ppKey === 'homepageHero') {
     return [
       {
         name: apiName(prefixed(demoName, 'Personalized Hero')),
         label: 'Personalized Hero',
-        attributeValues: heroDecisionAttributeValues(formData),
+        attributeValues: heroDecisionAttributeValues(formData, uploadedHtml),
         state: 'Live',
       },
     ];
@@ -160,7 +188,7 @@ function decisionsFor(ppKey, demoName, formData) {
 // it drives the live Web SDK beacon (see html/inject-sdk.js). Stored verbatim so
 // the beacon can be (re)built; empty is allowed (page renders, beacon commented).
 async function deploy(conn, opts) {
-  const { demoName, profileDataGraphName, formData, connector } = opts || {};
+  const { demoName, profileDataGraphName, formData, connector, uploadedHtml } = opts || {};
   if (!demoName) throw new Error('deploy: demoName is required');
   if (!profileDataGraphName) throw new Error('deploy: profileDataGraphName is required');
   const dataSpaceName = (opts && opts.dataSpaceName) || DEFAULT_DATA_SPACE;
@@ -206,7 +234,7 @@ async function deploy(conn, opts) {
         profileDataGraphName,
         source: 'PersonalizationApp',
         schemaName: schemaNameByKey[def.schemaKey],
-        decisions: decisionsFor(def.key, demoName, formData),
+        decisions: decisionsFor(def.key, demoName, formData, uploadedHtml),
       });
       artifacts.pps.push({ key: def.key, name, id: created.id, zone: def.zone });
     }

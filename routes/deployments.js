@@ -75,6 +75,9 @@ router.post('/', async (req, res, next) => {
         dataSpaceName,
         connector,
         formData: formData || {},
+        // When the SE uploaded a file, extract real hero content from it into
+        // the decision so the WPM swap shows the actual personalized creative.
+        uploadedHtml: uploadedHtml && uploadedHtml.trim() ? uploadedHtml : null,
       });
     } catch (err) {
       // Deploy failed (and rolled back its own partial objects). Do NOT persist
