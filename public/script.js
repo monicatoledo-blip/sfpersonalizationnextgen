@@ -253,15 +253,13 @@ function renderNewDemo() {
     value: prefill.profileDataGraphName || 'Marketing_Content_Personalizat',
     placeholder: 'e.g. Marketing_Content_Personalizat',
   });
-  // Data Cloud tenant-specific endpoint (dcTse) — the beacon host that makes the
-  // Web SDK (and WPM) live on the page. The app tries to auto-discover it, but
-  // that isn't always reachable via API, so it's an editable field. Find it in
-  // Data Cloud Setup, or from the org's Web SDK / Website Connector snippet
-  // (the host in cdn URL: <tenant>-<pod>.c360a.salesforce.com).
-  const tenantInput = el('input', {
-    type: 'text', id: 'tenantEndpoint',
-    value: prefill.dcTse || '',
-    placeholder: 'e.g. abc123-xyz.c360a.salesforce.com',
+  // Website connector id (UUID) or the full beacon <script src> from the org's
+  // Web SDK install snippet. This drives the live beacon that makes WPM attach.
+  // Data Cloud Setup → Websites & Mobile Apps → your connector → install code.
+  const connectorInput = el('input', {
+    type: 'text', id: 'connectorId',
+    value: prefill.connector || '',
+    placeholder: 'connector id (UUID) or full https://cdn.c360a.salesforce.com/beacon/... URL',
   });
 
   // Demo name — always used (form OR upload).
@@ -328,10 +326,10 @@ function renderNewDemo() {
   form.appendChild(dataGraphInput);
   form.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
     'The Data Cloud Profile Data Graph the Personalization Points bind to. Applies whether you configure the form or upload a file.'));
-  form.appendChild(el('label', { style: 'margin-top:1.25rem; display:block' }, 'Data Cloud tenant endpoint (optional)'));
-  form.appendChild(tenantInput);
+  form.appendChild(el('label', { style: 'margin-top:1.25rem; display:block' }, 'Website connector (for live WPM)'));
+  form.appendChild(connectorInput);
   form.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
-    'The beacon host that makes WPM live on the page (e.g. abc123-xyz.c360a.salesforce.com). Leave blank to auto-discover; if the deploy warns the beacon could not be wired, paste it here and redeploy. Find it in Data Cloud Setup or your Website Connector / Web SDK snippet.'));
+    'Makes WPM attach to the page. Paste your Website connector id (UUID) or the whole Web SDK <script src> URL from its install snippet. In Data Cloud Setup → Websites & Mobile Apps → your connector. Leave blank to host the page without a live beacon (WPM won’t attach).'));
 
   const statusArea = el('div', { id: 'deployStatus', style: 'margin-top:1.25rem' });
   const deployBtn = el('button', { class: 'btn', onclick: () => runDeploy() },
@@ -436,7 +434,7 @@ async function runDeploy() {
       industry: formData.adaptiveWebSubIndustry,
       formData,
       profileDataGraphName,
-      tenantEndpoint: ($('#tenantEndpoint') && $('#tenantEndpoint').value.trim()) || undefined,
+      connector: ($('#connectorId') && $('#connectorId').value.trim()) || undefined,
       uploadedHtml: usingUpload ? _uploadedHtml : undefined,
       expiry: 'never',
     });
@@ -498,7 +496,7 @@ function renderPostDeploy(result, conn) {
   const a = d.artifacts || {};
   const nSchemas = (a.schemas || []).length;
   const nPps = (a.pps || []).length;
-  const beaconLive = !!d.dcTse;
+  const beaconLive = !!d.connector;
   box.appendChild(el('div', { class: 'banner success small', style: 'margin-top:1rem' },
     `Created ${nSchemas} Content Schemas + ${nPps} Personalization Points in data space “${a.dataSpaceName || 'default'}”.`));
   box.appendChild(el('div', { class: beaconLive ? 'banner info small' : 'banner warn small', style: 'margin-top:0.5rem' },

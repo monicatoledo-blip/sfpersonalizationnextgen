@@ -37,7 +37,7 @@ function expiresAtFrom(presetKey) {
 // POST /api/deployments
 router.post('/', async (req, res, next) => {
   try {
-    const { name, industry, formData, connectionId, expiry, uploadedHtml, profileDataGraphName, dataSpaceName, tenantEndpoint } = req.body || {};
+    const { name, industry, formData, connectionId, expiry, uploadedHtml, profileDataGraphName, dataSpaceName, connector } = req.body || {};
     if (!name || !connectionId) {
       return res.status(400).json({ error: 'name and connectionId are required' });
     }
@@ -73,7 +73,7 @@ router.post('/', async (req, res, next) => {
         demoName: name,
         profileDataGraphName,
         dataSpaceName,
-        tenantEndpoint,
+        connector,
         formData: formData || {},
       });
     } catch (err) {
@@ -92,7 +92,7 @@ router.post('/', async (req, res, next) => {
     //    beacon is live and WPM can attach; otherwise it's commented out and the
     //    sitemap still initializes (page renders, regenerate later).
     const generatedHtml = injectSdk(baseHtml, {
-      dcTse: deployResult.dcTse || (deployResult.artifacts && deployResult.artifacts.dcTse) || null,
+      connector: deployResult.connector || (deployResult.artifacts && deployResult.artifacts.connector) || null,
       dataSpace: dataSpaceName || (deployResult.artifacts && deployResult.artifacts.dataSpaceName) || 'default',
     });
 
@@ -200,7 +200,7 @@ router.put('/:id', async (req, res, next) => {
     // regenerate keeps the live beacon wired.
     const priorArtifacts = existing.sf_artifacts || {};
     const generatedHtml = injectSdk(rendered, {
-      dcTse: priorArtifacts.dcTse || null,
+      connector: priorArtifacts.connector || null,
       dataSpace: priorArtifacts.dataSpaceName || 'default',
     });
 

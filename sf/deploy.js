@@ -153,26 +153,21 @@ function decisionsFor(ppKey, demoName, formData) {
   ];
 }
 
-// deploy(conn, { demoName, dataSpaceName?, profileDataGraphName, formData })
-//   -> { mode:'deployed', dcTse, artifacts } | throws on hard failure
-// artifacts: { schemas:[{name,id}], transformers:[{name,id}], pps:[{name,id,zone}], dataSpaceName }
+// deploy(conn, { demoName, dataSpaceName?, profileDataGraphName, connector, formData })
+//   -> { mode:'deployed', connector, artifacts } | throws on hard failure
+// artifacts: { schemas:[{name,id}], transformers:[{name,id}], pps:[{name,id,zone}], dataSpaceName, connector }
+// `connector` is the Website connector id (UUID) or a pasted beacon <script src>;
+// it drives the live Web SDK beacon (see html/inject-sdk.js). Stored verbatim so
+// the beacon can be (re)built; empty is allowed (page renders, beacon commented).
 async function deploy(conn, opts) {
-  const { demoName, profileDataGraphName, formData, tenantEndpoint } = opts || {};
+  const { demoName, profileDataGraphName, formData, connector } = opts || {};
   if (!demoName) throw new Error('deploy: demoName is required');
   if (!profileDataGraphName) throw new Error('deploy: profileDataGraphName is required');
   const dataSpaceName = (opts && opts.dataSpaceName) || DEFAULT_DATA_SPACE;
 
-  // Tenant endpoint (beacon host): prefer an explicit value from the SE; else
-  // best-effort auto-discovery. Normalize away any scheme/trailing slash.
-  let dcTse = (tenantEndpoint || '').trim().replace(/^https?:\/\//, '').split('/')[0];
-  const hm = dcTse.match(/[A-Za-z0-9.-]+/); // keep only a valid hostname run
-  dcTse = hm ? hm[0].replace(/\.+$/, '') : null;
-  if (!dcTse) {
-    const info = await p13n.getOrgInfo(conn);
-    dcTse = info.dcTse || null;
-  }
+  const connectorValue = (connector || '').trim() || null;
 
-  const artifacts = { schemas: [], transformers: [], pps: [], dataSpaceName, dcTse };
+  const artifacts = { schemas: [], transformers: [], pps: [], dataSpaceName, connector: connectorValue };
 
   try {
     // 1. Content Schemas.
@@ -216,7 +211,7 @@ async function deploy(conn, opts) {
       artifacts.pps.push({ key: def.key, name, id: created.id, zone: def.zone });
     }
 
-    return { mode: 'deployed', dcTse, artifacts };
+    return { mode: 'deployed', connector: connectorValue, artifacts };
   } catch (err) {
     // Partial-deploy rollback: a demo is all-or-nothing. Remove whatever we
     // created (reverse dependency order) so the org isn't left with orphans and

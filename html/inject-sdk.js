@@ -15,30 +15,43 @@ const CONTENT_ZONES = [
   { name: 'category_hero', selector: '#cat-hero' },
 ];
 
-// Build the live beacon script URL from the org's tenant-specific endpoint.
-// getOrgInfo returns dcTse as a bare host (e.g. "mfq...-gnt...c360a.salesforce.com");
-// tolerate a value that already includes a scheme.
-function beaconUrlFromDcTse(dcTse) {
-  if (!dcTse) return null;
-  // Sanitize to a bare hostname: drop scheme, any path, and any stray
-  // characters a paste may include (e.g. a trailing ")" or whitespace). A
-  // hostname is only letters, digits, dots and hyphens.
-  let host = String(dcTse).trim().replace(/^https?:\/\//, '');
-  host = host.split('/')[0]; // strip any path
-  const m = host.match(/[A-Za-z0-9.-]+/); // first valid hostname run
-  host = m ? m[0].replace(/\.+$/, '') : '';
-  if (!host) return null;
-  return `https://${host}/scripts/c360a.min.js`;
+// Build the live Data Cloud Web SDK beacon URL.
+//
+// The beacon lives on the CDN keyed by the WEBSITE CONNECTOR id (a UUID), NOT
+// the tenant-specific endpoint host:
+//   https://cdn.c360a.salesforce.com/beacon/c360a/<connectorId>/scripts/c360a.min.js
+// (verified against the meshmesh SDO — the connector's own snippet, HTTP 200.)
+//
+// Accepts, in order of preference:
+//   1. a full beacon URL pasted from the connector's install snippet
+//      (https://cdn.c360a.salesforce.com/beacon/c360a/<uuid>/scripts/c360a.min.js)
+//   2. a bare connector UUID (cec9b1f4-0e16-4c62-923d-afd61d237da0)
+// Returns null if we can't derive a usable beacon URL.
+const CDN_BEACON = (id) => `https://cdn.c360a.salesforce.com/beacon/c360a/${id}/scripts/c360a.min.js`;
+const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+function beaconUrlFromConnector(input) {
+  if (!input) return null;
+  const s = String(input).trim();
+  // If a full beacon URL was pasted (optionally wrapped in a <script src="...">),
+  // pull the src and use it as-is when it points at the c360a beacon path.
+  const srcMatch = s.match(/https?:\/\/[^\s"')<>]*c360a[^\s"')<>]*c360a\.min\.js/i);
+  if (srcMatch) return srcMatch[0];
+  // Otherwise, extract a connector UUID and build the CDN URL.
+  const id = s.match(UUID_RE);
+  if (id) return CDN_BEACON(id[0]);
+  return null;
 }
 
 // opts:
-//   dcTse:     Data Cloud tenant-specific endpoint (from p13n.getOrgInfo). When
-//              present, the LIVE beacon is injected so WPM (?sf_personalization_wpm)
-//              can attach. When absent, the beacon is commented out so the page
-//              still renders and can be regenerated once the org is known.
+//   connector: the Website connector id (UUID) or a full beacon <script src>
+//              pasted from the connector's install snippet. When present, the
+//              LIVE beacon is injected so WPM (?sf_personalization_wpm) can
+//              attach. When absent, the beacon is commented out so the page
+//              still renders and can be regenerated once the connector is known.
 //   dataSpace: the Data Cloud data space the PPs live in (default 'default').
 //              WPM lists a page's PPs by the data space declared in the sitemap.
-function buildSnippet({ dcTse, dataSpace } = {}) {
+function buildSnippet({ connector, dataSpace } = {}) {
   const sitemap = {
     dataSpace: dataSpace || 'default',
     global: {
@@ -46,11 +59,11 @@ function buildSnippet({ dcTse, dataSpace } = {}) {
     },
   };
 
-  const beaconUrl = beaconUrlFromDcTse(dcTse);
+  const beaconUrl = beaconUrlFromConnector(connector);
   const beacon = beaconUrl
     ? `<script src="${beaconUrl}"></script>`
-    : `<!-- Data Cloud Web SDK beacon: set the org's tenant endpoint (dcTse) to enable.
-     <script src="https://{{dcTse}}/scripts/c360a.min.js"></script> -->`;
+    : `<!-- Data Cloud Web SDK beacon: set the Website connector id to enable.
+     <script src="https://cdn.c360a.salesforce.com/beacon/c360a/{{connectorId}}/scripts/c360a.min.js"></script> -->`;
 
   return `
 ${beacon}
@@ -88,4 +101,4 @@ function injectSdk(html, opts = {}) {
   return snippet + html;
 }
 
-module.exports = { injectSdk, buildSnippet, beaconUrlFromDcTse, CONTENT_ZONES };
+module.exports = { injectSdk, buildSnippet, beaconUrlFromConnector, CONTENT_ZONES };
