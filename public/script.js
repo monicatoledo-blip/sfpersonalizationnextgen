@@ -250,8 +250,11 @@ function renderNewDemo() {
   // editable field pre-filled with the org's known graph.
   const dataGraphInput = el('input', {
     type: 'text', id: 'dataGraphName',
-    value: prefill.profileDataGraphName || 'Marketing_Content_Personalizat',
-    placeholder: 'e.g. Marketing_Content_Personalizat',
+    // Default to the Real-Time profile graph — WPM's Embedded-Content picker only
+    // lists PPs bound to a real-time profile data graph (batch/marketing graphs
+    // are ignored). Editable for other orgs.
+    value: prefill.profileDataGraphName || 'Real_Time_Personalization',
+    placeholder: 'e.g. Real_Time_Personalization',
   });
   // Website connector id (UUID) or the full beacon <script src> from the org's
   // Web SDK install snippet. This drives the live beacon that makes WPM attach.
