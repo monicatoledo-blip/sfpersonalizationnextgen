@@ -166,48 +166,80 @@ async function deploy(conn, opts) {
 
   const artifacts = { schemas: [], transformers: [], pps: [], dataSpaceName, dcTse };
 
-  // 1. Content Schemas.
-  const schemaNameByKey = {};
-  for (const def of SCHEMA_DEFS) {
-    const name = apiName(prefixed(demoName, def.label));
-    const created = await p13n.createSchema(conn, {
-      name,
-      label: prefixed(demoName, def.label),
-      dataSpaceName,
-      attributes: def.attributes,
+  try {
+    // 1. Content Schemas.
+    const schemaNameByKey = {};
+    for (const def of SCHEMA_DEFS) {
+      const name = apiName(prefixed(demoName, def.label));
+      const created = await p13n.createSchema(conn, {
+        name,
+        label: prefixed(demoName, def.label),
+        dataSpaceName,
+        attributes: def.attributes,
+      });
+      schemaNameByKey[def.key] = name;
+      artifacts.schemas.push({ key: def.key, name, id: created.id });
+    }
+
+    // 2. Hero transformer (bound to the hero schema).
+    const heroTransformerName = apiName(prefixed(demoName, 'Web - Hero Experience Template'));
+    const t = await p13n.createTransformer(conn, {
+      name: heroTransformerName,
+      label: prefixed(demoName, 'Web - Hero Experience Template'),
+      dataSpace: dataSpaceName,
+      schemaReference: schemaNameByKey.heroBanner,
+      substitutionDefinitions: heroSubstitutionDefinitions(),
+      html: heroTransformerHtml(),
     });
-    schemaNameByKey[def.key] = name;
-    artifacts.schemas.push({ key: def.key, name, id: created.id });
+    artifacts.transformers.push({ name: heroTransformerName, id: t.id, schemaKey: 'heroBanner' });
+
+    // 3. Personalization Points (+ nested decisions).
+    for (const def of PP_DEFS) {
+      const name = apiName(prefixed(demoName, def.label));
+      const created = await p13n.createPoint(conn, {
+        name,
+        label: prefixed(demoName, def.label),
+        dataSpaceName,
+        profileDataGraphName,
+        source: 'PersonalizationApp',
+        schemaName: schemaNameByKey[def.schemaKey],
+        decisions: decisionsFor(def.key, demoName, formData),
+      });
+      artifacts.pps.push({ key: def.key, name, id: created.id, zone: def.zone });
+    }
+
+    return { mode: 'deployed', dcTse, artifacts };
+  } catch (err) {
+    // Partial-deploy rollback: a demo is all-or-nothing. Remove whatever we
+    // created (reverse dependency order) so the org isn't left with orphans and
+    // a retry with the same name won't collide with "already exists". Rollback
+    // failures are collected but never mask the original error.
+    const rollback = await rollbackArtifacts(conn, artifacts);
+    err.rollback = rollback;
+    err.message = `${err.message}${rollback.orphans.length ? ` [rollback left ${rollback.orphans.length} object(s) — remove manually]` : ' [created objects rolled back]'}`;
+    throw err;
   }
+}
 
-  // 2. Hero transformer (bound to the hero schema).
-  const heroTransformerName = apiName(prefixed(demoName, 'Web - Hero Experience Template'));
-  const t = await p13n.createTransformer(conn, {
-    name: heroTransformerName,
-    label: prefixed(demoName, 'Web - Hero Experience Template'),
-    dataSpace: dataSpaceName,
-    schemaReference: schemaNameByKey.heroBanner,
-    substitutionDefinitions: heroSubstitutionDefinitions(),
-    html: heroTransformerHtml(),
-  });
-  artifacts.transformers.push({ name: heroTransformerName, id: t.id, schemaKey: 'heroBanner' });
-
-  // 3. Personalization Points (+ nested decisions).
-  for (const def of PP_DEFS) {
-    const name = apiName(prefixed(demoName, def.label));
-    const created = await p13n.createPoint(conn, {
-      name,
-      label: prefixed(demoName, def.label),
-      dataSpaceName,
-      profileDataGraphName,
-      source: 'PersonalizationApp',
-      schemaName: schemaNameByKey[def.schemaKey],
-      decisions: decisionsFor(def.key, demoName, formData),
-    });
-    artifacts.pps.push({ key: def.key, name, id: created.id, zone: def.zone });
+// Best-effort deletion of everything a failed deploy created, reverse order:
+// PPs -> transformers -> schemas. Returns { removed, orphans }.
+async function rollbackArtifacts(conn, artifacts) {
+  const removed = [];
+  const orphans = [];
+  const steps = [
+    ...(artifacts.pps || []).map((p) => ['PersonalizationPoint', p13n.deletePoint, p.id || p.name]),
+    ...(artifacts.transformers || []).map((t) => ['Transformer', p13n.deleteTransformer, t.id || t.name]),
+    ...(artifacts.schemas || []).map((s) => ['PersonalizationSchema', p13n.deleteSchema, s.id || s.name]),
+  ].filter(([, , ref]) => ref);
+  for (const [type, fn, ref] of steps) {
+    try {
+      await fn(conn, ref);
+      removed.push({ type, ref });
+    } catch (e) {
+      orphans.push({ type, ref, reason: e.message });
+    }
   }
-
-  return { mode: 'deployed', dcTse, artifacts };
+  return { removed, orphans };
 }
 
 module.exports = {

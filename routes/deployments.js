@@ -76,7 +76,15 @@ router.post('/', async (req, res, next) => {
         formData: formData || {},
       });
     } catch (err) {
-      deployResult = { mode: 'error', error: err.message };
+      // Deploy failed (and rolled back its own partial objects). Do NOT persist
+      // a demo row — a phantom demo with no PPs / dead beacon would clutter
+      // Manage Demos and confuse a retry. Surface the error so the SE can fix +
+      // retry with the same name (rollback freed the names).
+      return res.status(200).json({
+        id: null,
+        name,
+        deploy: { mode: 'error', error: err.message, rollback: err.rollback || null },
+      });
     }
 
     // 3. Inject the Web SDK. If the deploy discovered a tenant endpoint, the
