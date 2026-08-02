@@ -164,7 +164,9 @@ async function deploy(conn, opts) {
 
   // Tenant endpoint (beacon host): prefer an explicit value from the SE; else
   // best-effort auto-discovery. Normalize away any scheme/trailing slash.
-  let dcTse = (tenantEndpoint || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '') || null;
+  let dcTse = (tenantEndpoint || '').trim().replace(/^https?:\/\//, '').split('/')[0];
+  const hm = dcTse.match(/[A-Za-z0-9.-]+/); // keep only a valid hostname run
+  dcTse = hm ? hm[0].replace(/\.+$/, '') : null;
   if (!dcTse) {
     const info = await p13n.getOrgInfo(conn);
     dcTse = info.dcTse || null;

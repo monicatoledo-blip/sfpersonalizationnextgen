@@ -20,7 +20,14 @@ const CONTENT_ZONES = [
 // tolerate a value that already includes a scheme.
 function beaconUrlFromDcTse(dcTse) {
   if (!dcTse) return null;
-  const host = String(dcTse).replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  // Sanitize to a bare hostname: drop scheme, any path, and any stray
+  // characters a paste may include (e.g. a trailing ")" or whitespace). A
+  // hostname is only letters, digits, dots and hyphens.
+  let host = String(dcTse).trim().replace(/^https?:\/\//, '');
+  host = host.split('/')[0]; // strip any path
+  const m = host.match(/[A-Za-z0-9.-]+/); // first valid hostname run
+  host = m ? m[0].replace(/\.+$/, '') : '';
+  if (!host) return null;
   return `https://${host}/scripts/c360a.min.js`;
 }
 
