@@ -37,7 +37,7 @@ function expiresAtFrom(presetKey) {
 // POST /api/deployments
 router.post('/', async (req, res, next) => {
   try {
-    const { name, industry, formData, connectionId, expiry, uploadedHtml, profileDataGraphName, dataSpaceName } = req.body || {};
+    const { name, industry, formData, connectionId, expiry, uploadedHtml, profileDataGraphName, dataSpaceName, tenantEndpoint } = req.body || {};
     if (!name || !connectionId) {
       return res.status(400).json({ error: 'name and connectionId are required' });
     }
@@ -73,6 +73,7 @@ router.post('/', async (req, res, next) => {
         demoName: name,
         profileDataGraphName,
         dataSpaceName,
+        tenantEndpoint,
         formData: formData || {},
       });
     } catch (err) {

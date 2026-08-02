@@ -157,12 +157,18 @@ function decisionsFor(ppKey, demoName, formData) {
 //   -> { mode:'deployed', dcTse, artifacts } | throws on hard failure
 // artifacts: { schemas:[{name,id}], transformers:[{name,id}], pps:[{name,id,zone}], dataSpaceName }
 async function deploy(conn, opts) {
-  const { demoName, profileDataGraphName, formData } = opts || {};
+  const { demoName, profileDataGraphName, formData, tenantEndpoint } = opts || {};
   if (!demoName) throw new Error('deploy: demoName is required');
   if (!profileDataGraphName) throw new Error('deploy: profileDataGraphName is required');
   const dataSpaceName = (opts && opts.dataSpaceName) || DEFAULT_DATA_SPACE;
 
-  const { dcTse } = await p13n.getOrgInfo(conn);
+  // Tenant endpoint (beacon host): prefer an explicit value from the SE; else
+  // best-effort auto-discovery. Normalize away any scheme/trailing slash.
+  let dcTse = (tenantEndpoint || '').trim().replace(/^https?:\/\//, '').replace(/\/+$/, '') || null;
+  if (!dcTse) {
+    const info = await p13n.getOrgInfo(conn);
+    dcTse = info.dcTse || null;
+  }
 
   const artifacts = { schemas: [], transformers: [], pps: [], dataSpaceName, dcTse };
 
