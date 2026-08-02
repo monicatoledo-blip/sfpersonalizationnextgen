@@ -17,8 +17,12 @@ const pool = new Pool({
   // stall unrelated requests (session middleware reads the DB per request).
   connectionTimeoutMillis: 5000, // give up acquiring a connection
   idleTimeoutMillis: 30000, // release idle clients
-  statement_timeout: 10000, // server-side kill of a slow query
-  query_timeout: 10000, // client-side kill of a slow query
+  // 10s was too tight: persisting a demo row includes a multi-MB uploaded-HTML
+  // blob, whose round-trip can exceed 10s on essential-0 and surfaced as
+  // "Query read timeout" AFTER the SF objects were already created (orphans).
+  // 25s still bounds a genuinely stuck query well within reason.
+  statement_timeout: 25000, // server-side kill of a slow query
+  query_timeout: 25000, // client-side kill of a slow query
   keepAlive: true,
 });
 

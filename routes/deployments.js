@@ -96,21 +96,46 @@ router.post('/', async (req, res, next) => {
       dataSpace: dataSpaceName || (deployResult.artifacts && deployResult.artifacts.dataSpaceName) || 'default',
     });
 
-    // 4. Persist the deployment.
-    const row = await db.createDeployment({
-      userId: req.user.id,
-      sfConnectionId: connectionId,
-      name,
-      industry,
-      formData: formData || {},
-      generatedHtml,
-      // Store the artifacts object itself (schemas/transformers/pps + dcTse) so
-      // cleanup and the delete-confirm modal read the arrays directly. Keep the
-      // deploy mode alongside for reference.
-      sfArtifacts: { mode: deployResult.mode, ...(deployResult.artifacts || {}) },
-      status: 'active',
-      expiresAt: expiresAtFrom(expiry),
-    });
+    // 4. Persist the deployment. If this fails AFTER the SF objects were
+    //    created (e.g. a DB timeout on the large HTML blob), the objects would
+    //    be orphaned — so roll them back before surfacing the error.
+    let row;
+    try {
+      row = await db.createDeployment({
+        userId: req.user.id,
+        sfConnectionId: connectionId,
+        name,
+        industry,
+        formData: formData || {},
+        generatedHtml,
+        // Store the artifacts object itself (schemas/transformers/pps + dcTse) so
+        // cleanup and the delete-confirm modal read the arrays directly. Keep the
+        // deploy mode alongside for reference.
+        sfArtifacts: { mode: deployResult.mode, ...(deployResult.artifacts || {}) },
+        status: 'active',
+        expiresAt: expiresAtFrom(expiry),
+      });
+    } catch (persistErr) {
+      let rollback = null;
+      try {
+        rollback = await cleanup(conn, deployResult.artifacts || {});
+      } catch (rbErr) {
+        rollback = { mode: 'error', error: rbErr.message };
+      }
+      const leftover = rollback && rollback.orphans && rollback.orphans.length;
+      return res.status(200).json({
+        id: null,
+        name,
+        deploy: {
+          mode: 'error',
+          error: `Created the SP objects, but saving the demo failed: ${persistErr.message}.` +
+            (leftover
+              ? ` Rollback left ${leftover} object(s) in the org — remove them from Salesforce manually.`
+              : ' The created objects were rolled back; fix the issue and redeploy.'),
+          rollback,
+        },
+      });
+    }
 
     const base = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
     res.status(201).json({
