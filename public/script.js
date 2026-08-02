@@ -522,12 +522,10 @@ function renderManageDemos() {
       return;
     }
     const table = el('table', { class: 'demos' });
-    table.appendChild(el('tr', {}, [
+    table.appendChild(el('thead', {}, el('tr', {}, [
       el('th', {}, 'Name'), el('th', {}, 'Org'), el('th', {}, 'Status'),
       el('th', {}, 'Created'), el('th', {}, 'Actions'),
-    ].map((c) => c)));
-    const thead = table.firstChild;
-    thead.replaceWith(el('thead', {}, thead));
+    ])));
     rows.forEach((r) => {
       table.appendChild(el('tr', {}, [
         el('td', {}, r.name),
@@ -554,9 +552,9 @@ function renderManageDemos() {
 function confirmDelete(row) {
   const art = row.artifacts || {};
   const ids = [];
-  (art.schemas || []).forEach((s) => ids.push('Schema: ' + (s.fullName || s.id || JSON.stringify(s))));
-  (art.pps || []).forEach((p) => ids.push('PP: ' + (p.fullName || p.id || JSON.stringify(p))));
-  (art.decisions || []).forEach((d) => ids.push('Decision: ' + (d.id || JSON.stringify(d))));
+  (art.schemas || []).forEach((s) => ids.push('Content Schema: ' + (s.name || s.fullName || s.id || JSON.stringify(s))));
+  (art.transformers || []).forEach((t) => ids.push('Experience Template: ' + (t.name || t.id || JSON.stringify(t))));
+  (art.pps || []).forEach((p) => ids.push('Personalization Point: ' + (p.name || p.fullName || p.id || JSON.stringify(p))));
 
   const modalRoot = $('#modalRoot');
   modalRoot.innerHTML = '';
