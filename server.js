@@ -17,8 +17,10 @@ const salesforceAuth = require('./auth/salesforce');
 const app = express();
 app.set('trust proxy', 1); // Heroku terminates TLS at the router.
 
-app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true }));
+// Uploaded Adaptive Web exports are large (a few MB of inlined HTML/CSS/assets),
+// and JSON-encoding inflates them further. 10mb comfortably fits real exports.
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // --- Sessions (Postgres-backed) ---
 app.use(
@@ -80,6 +82,14 @@ app.get('*', (req, res, next) => {
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[server] unhandled error', err);
+  // Body-parser rejects oversized payloads with a 413 — make it actionable
+  // instead of a generic 500 (large uploaded HTML exports are the usual cause).
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({
+      error: 'file_too_large',
+      detail: 'The uploaded HTML is too large for the server to accept. Try a smaller export.',
+    });
+  }
   const status = err.status || 500;
   res.status(status).json({ error: err.publicMessage || 'internal_error' });
 });

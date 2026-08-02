@@ -39,7 +39,8 @@ async function api(method, path, body) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
-    const err = new Error((data && data.error) || `HTTP ${res.status}`);
+    const msg = (data && (data.detail || data.error)) || `HTTP ${res.status}`;
+    const err = new Error(msg);
     err.status = res.status;
     err.data = data;
     throw err;
