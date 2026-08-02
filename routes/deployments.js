@@ -209,8 +209,22 @@ router.delete('/:id', async (req, res, next) => {
       }
     }
 
-    await db.markDeploymentDeleted(req.user.id, req.params.id);
-    res.json({ ok: true, cleanup: cleanupResult });
+    // Only mark the demo deleted if org cleanup fully succeeded (or there were
+    // no org objects / no connection). If objects couldn't be removed, KEEP the
+    // row so the SE can retry the delete — and tell them what's still in the org
+    // instead of a silent success.
+    const orphans = (cleanupResult && cleanupResult.orphans) || [];
+    const fullyClean = cleanupResult.mode === 'complete' || cleanupResult.mode === 'skipped' || cleanupResult.mode === 'dry_run';
+    if (fullyClean) {
+      await db.markDeploymentDeleted(req.user.id, req.params.id);
+      return res.json({ ok: true, cleanup: cleanupResult });
+    }
+    return res.status(207).json({
+      ok: false,
+      cleanup: cleanupResult,
+      error: 'cleanup_incomplete',
+      detail: `${orphans.length} object(s) could not be removed from the org and were left in place; the demo was NOT deleted so you can retry. Objects: ${orphans.map((o) => `${o.type} ${o.ref}`).join(', ')}`,
+    });
   } catch (err) {
     next(err);
   }

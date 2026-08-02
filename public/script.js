@@ -575,7 +575,13 @@ async function doDelete(id, close) {
   try {
     await api('DELETE', '/api/deployments/' + id);
   } catch (e) {
-    alert('Delete failed: ' + e.message);
+    // 207 = cleanup incomplete: some org objects remain and the demo was kept
+    // so you can retry. Show exactly what's left.
+    if (e.status === 207 || (e.data && e.data.error === 'cleanup_incomplete')) {
+      alert('Delete incomplete — the demo was kept so you can retry.\n\n' + (e.message || 'Some objects could not be removed from the org.'));
+    } else {
+      alert('Delete failed: ' + e.message);
+    }
   }
   close();
   renderApp();
