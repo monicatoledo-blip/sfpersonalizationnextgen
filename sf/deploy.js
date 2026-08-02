@@ -20,6 +20,7 @@
 const p13n = require('./p13n');
 const { getMergedAdaptiveStory } = require('../data/generator');
 const { extractHeroContent } = require('../html/extract');
+const { uploadHeroImage } = require('../html/cloudinary');
 
 const DEFAULT_DATA_SPACE = 'default';
 
@@ -108,8 +109,11 @@ function heroSubstitutionDefinitions() {
 // Build the personalized-hero attribute values. Prefer content EXTRACTED from
 // the uploaded/rendered HTML (the warm "Welcome back" hero the sim renders after
 // form-fill) so the WPM swap shows the real creative; fall back to the form
-// config when there's no HTML. Images are Cloudinary URLs stored as-is.
-function heroDecisionAttributeValues(formData, uploadedHtml) {
+// config when there's no HTML. The hero image is often a base64 data URI in the
+// uploaded file, so we host it on Cloudinary and store the returned URL (a
+// decision attribute can't hold a multi-hundred-KB blob). Async because of the
+// upload.
+async function heroDecisionAttributeValues(demoName, formData, uploadedHtml) {
   let image = '';
   let header = '';
   let subheader = '';
@@ -149,6 +153,14 @@ function heroDecisionAttributeValues(formData, uploadedHtml) {
     cta = cta || String(story.homepageCtaText || story.intentTriggerText || 'Learn more').trim();
   }
 
+  // Host the image: base64 data URIs get uploaded to Cloudinary and swapped for
+  // the CDN URL; existing http(s) URLs pass through unchanged; a failed/unconfig
+  // upload drops the image (rest of the decision still lands).
+  if (image) {
+    const hosted = await uploadHeroImage(image, { publicId: `sp-demo/${apiName(demoName)}-hero` });
+    image = hosted || (/^https?:\/\//i.test(image) ? image : '');
+  }
+
   const values = [
     { attributeName: 'BackgroundImageUrl', value: image },
     { attributeName: 'Header', value: header },
@@ -159,14 +171,14 @@ function heroDecisionAttributeValues(formData, uploadedHtml) {
 }
 
 // Decisions per PP. Homepage hero gets the personalized content; the other two
-// get a single fallback decision so WPM has something to bind.
-function decisionsFor(ppKey, demoName, formData, uploadedHtml) {
+// get a single fallback decision so WPM has something to bind. Async (image host).
+async function decisionsFor(ppKey, demoName, formData, uploadedHtml) {
   if (ppKey === 'homepageHero') {
     return [
       {
         name: apiName(prefixed(demoName, 'Personalized Hero')),
         label: 'Personalized Hero',
-        attributeValues: heroDecisionAttributeValues(formData, uploadedHtml),
+        attributeValues: await heroDecisionAttributeValues(demoName, formData, uploadedHtml),
         state: 'Live',
       },
     ];
@@ -234,7 +246,7 @@ async function deploy(conn, opts) {
         profileDataGraphName,
         source: 'PersonalizationApp',
         schemaName: schemaNameByKey[def.schemaKey],
-        decisions: decisionsFor(def.key, demoName, formData, uploadedHtml),
+        decisions: await decisionsFor(def.key, demoName, formData, uploadedHtml),
       });
       artifacts.pps.push({ key: def.key, name, id: created.id, zone: def.zone });
     }
