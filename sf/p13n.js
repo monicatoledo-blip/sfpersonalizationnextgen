@@ -100,6 +100,9 @@ async function deleteSchema(conn, idOrName) {
 // substitutionDefinitions maps subvar name -> { configType:'SchemaPath',
 // defaultValue:'[attributes].[<attr>]', overridable:true, required:false }.
 async function createTransformer(conn, def) {
+  // NOTE: do NOT send `transformerCategory` — it is server-derived and the raw
+  // Connect POST rejects it as "Unrecognized field" (verified 2026-08-02). The
+  // org defaults it to EmbeddedContent and returns it in the response.
   const body = {
     name: def.name,
     label: def.label,
@@ -107,7 +110,6 @@ async function createTransformer(conn, def) {
     dataSpace: def.dataSpace,
     schemaReference: def.schemaReference,
     isEnabled: true,
-    transformerCategory: 'EmbeddedContent',
     transformerType: 'Handlebars',
     substitutionDefinitions: def.substitutionDefinitions,
     transformerTypeDetails: { html: def.html, script: null, componentName: null },
