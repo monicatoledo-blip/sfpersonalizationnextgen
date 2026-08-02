@@ -70,14 +70,17 @@ function beaconUrlFromConnector(input) {
 //              LIVE beacon is injected so WPM (?sf_personalization_wpm) can
 //              attach. When absent, the beacon is commented out so the page
 //              still renders and can be regenerated once the connector is known.
-//   dataSpace: retained for reference; the data space is bound to the connector
-//              server-side, NOT declared in the client sitemap (matches the org's
-//              real working sitemap, which carries no data space).
-function buildSnippet({ connector } = {}) {
-  // Match the shape of the org's working Web SDK sitemap: init() with no args,
-  // then initSitemap(config) with content zones under global + a default page
-  // type (the sim is a single-page app, so page type is Default/global).
+//   dataSpace: the Data Cloud data space the PPs live in (default 'default').
+//              REQUIRED for WPM: the implementation guide (p.60) states the
+//              "Select a Personalization Point" modal lists PPs "configured in
+//              the data space that is defined in the sitemap" — omit it and the
+//              picker shows "No Personalization Points found".
+function buildSnippet({ connector, dataSpace } = {}) {
+  // init() with no args, then initSitemap(config) with content zones under
+  // global + a default page type (single-page app => Default/global). The data
+  // space is declared on the sitemap so WPM can populate its PP picker.
   const config = {
+    dataspace: dataSpace || 'default',
     global: {
       contentZones: CONTENT_ZONES,
     },
