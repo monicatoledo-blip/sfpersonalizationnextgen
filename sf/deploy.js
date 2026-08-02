@@ -222,10 +222,23 @@ async function deploy(conn, opts) {
     // created (reverse dependency order) so the org isn't left with orphans and
     // a retry with the same name won't collide with "already exists". Rollback
     // failures are collected but never mask the original error.
-    const rollback = await rollbackArtifacts(conn, artifacts);
-    err.rollback = rollback;
-    err.message = `${err.message}${rollback.orphans.length ? ` [rollback left ${rollback.orphans.length} object(s) — remove manually]` : ' [created objects rolled back]'}`;
-    throw err;
+    //
+    // Build a FRESH Error rather than mutating `err` — jsforce may throw a
+    // string or a frozen object, and assigning to it would throw a TypeError
+    // that escapes as a generic 500, hiding the real cause.
+    const baseMsg = (err && err.message) || String(err);
+    let rollback = { removed: [], orphans: [] };
+    try {
+      rollback = await rollbackArtifacts(conn, artifacts);
+    } catch (rbErr) {
+      rollback.orphans.push({ reason: `rollback crashed: ${(rbErr && rbErr.message) || rbErr}` });
+    }
+    const suffix = rollback.orphans.length
+      ? ` [rollback left ${rollback.orphans.length} object(s) — remove manually]`
+      : ' [created objects rolled back]';
+    const wrapped = new Error(`${baseMsg}${suffix}`);
+    wrapped.rollback = rollback;
+    throw wrapped;
   }
 }
 

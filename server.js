@@ -91,7 +91,13 @@ app.use((err, req, res, next) => {
     });
   }
   const status = err.status || 500;
-  res.status(status).json({ error: err.publicMessage || 'internal_error' });
+  // Surface the actual message (not just "internal_error") so SEs and we can
+  // troubleshoot. These are our own error strings / Salesforce API messages,
+  // not sensitive. The stack stays server-side in the console.error above.
+  res.status(status).json({
+    error: err.publicMessage || 'internal_error',
+    detail: err.message || undefined,
+  });
 });
 
 const PORT = process.env.PORT || 3000;
