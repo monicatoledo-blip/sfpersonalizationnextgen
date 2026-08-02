@@ -3,16 +3,37 @@
 // Injects the Data Cloud Web SDK <script> and a sitemap content-zone init into
 // the <head> of the rendered adaptive-web HTML.
 //
-// Content zones (fixed — must match the template surfaces and the PP names the
-// deployer creates):
-//   homepage_hero     -> #warm-homepage-section    -> PP "Web - Homepage Hero"
-//   recommended_cards -> .floating-cards-container  -> PP "Web - Recommended Cards"
-//   category_hero     -> #cat-hero                  -> PP "Web - Category Hero"
-
+// Content zones — every stable, personalizable surface of the adaptive-web sim,
+// derived from the generator's [[TOKEN]] map + the template's stable ids/classes.
+// A content zone = a stable DOM element WPM can target/replace. Only anchors with
+// a reliable id/class are included (position-only surfaces are intentionally
+// omitted so WPM never binds to a moving target).
+//
+// The three the deployer creates PPs for today:
+//   homepage_hero     -> #warm-homepage-section
+//   recommended_cards -> .floating-cards-container
+//   category_hero     -> #cat-hero
+// The rest are advertised in the sitemap so an SE can bind additional experiences
+// in WPM without editing the page.
 const CONTENT_ZONES = [
+  // Homepage — cold (first-visit) and warm (returning) hero states.
+  { name: 'cold_homepage_hero', selector: '#cold-hero-section' },
   { name: 'homepage_hero', selector: '#warm-homepage-section' },
+  { name: 'home_flow', selector: '#home-flow-sections' },
+  // Recommendations grid (adaptive overlay).
   { name: 'recommended_cards', selector: '.floating-cards-container' },
+  // Category page surfaces.
+  { name: 'category_page', selector: '#categoryPageContainer' },
   { name: 'category_hero', selector: '#cat-hero' },
+  { name: 'category_core_services', selector: '#cat-core-services' },
+  { name: 'category_why_us', selector: '#cat-why-us' },
+  { name: 'category_insights', selector: '#cat-insights' },
+  // Landing page + lead-capture form.
+  { name: 'landing_page', selector: '#landingPageContainer' },
+  { name: 'contact_form', selector: '#contactForm' },
+  // Global chrome.
+  { name: 'nav_logo', selector: '#navHomeLogoLink' },
+  { name: 'chat_widget', selector: '#chatWidget' },
 ];
 
 // Build the live Data Cloud Web SDK beacon URL.
@@ -49,14 +70,18 @@ function beaconUrlFromConnector(input) {
 //              LIVE beacon is injected so WPM (?sf_personalization_wpm) can
 //              attach. When absent, the beacon is commented out so the page
 //              still renders and can be regenerated once the connector is known.
-//   dataSpace: the Data Cloud data space the PPs live in (default 'default').
-//              WPM lists a page's PPs by the data space declared in the sitemap.
-function buildSnippet({ connector, dataSpace } = {}) {
-  const sitemap = {
-    dataSpace: dataSpace || 'default',
+//   dataSpace: retained for reference; the data space is bound to the connector
+//              server-side, NOT declared in the client sitemap (matches the org's
+//              real working sitemap, which carries no data space).
+function buildSnippet({ connector } = {}) {
+  // Match the shape of the org's working Web SDK sitemap: init() with no args,
+  // then initSitemap(config) with content zones under global + a default page
+  // type (the sim is a single-page app, so page type is Default/global).
+  const config = {
     global: {
       contentZones: CONTENT_ZONES,
     },
+    pageTypeDefault: { name: 'Default' },
   };
 
   const beaconUrl = beaconUrlFromConnector(connector);
@@ -68,13 +93,14 @@ function buildSnippet({ connector, dataSpace } = {}) {
   return `
 ${beacon}
 <script>
-  // SP Demo Builder — sitemap content zones + data space for WPM / Personalization.
+  // SP Demo Builder — sitemap content zones for WPM / Personalization.
   (function initSalesforceInteractions() {
     function boot() {
       if (typeof SalesforceInteractions === 'undefined') return;
-      SalesforceInteractions.init({
-        sitemap: ${JSON.stringify(sitemap, null, 6)}
-      });
+      var config = ${JSON.stringify(config, null, 6)};
+      SalesforceInteractions.init().then(function () {
+        SalesforceInteractions.initSitemap(config);
+      }).catch(function (e) { console.error('[SP Demo] SalesforceInteractions.init failed', e); });
     }
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
       boot();
