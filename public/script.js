@@ -490,8 +490,12 @@ function renderPostDeploy(result, conn) {
       // Real WPM: open the hosted page with the activation param. The Web SDK
       // prompts SF login and overlays the Web Personalization Manager.
       el('a', { class: 'btn', href: result.hostedUrl + '?sf_personalization_wpm', target: '_blank' }, 'Open in WPM'),
+      el('a', { class: 'btn secondary', href: '/api/deployments/' + result.id + '/sitemap' }, 'Download Sitemap'),
     ])
   );
+  // One-time connector step so WPM sees this page's content zones + PPs.
+  box.appendChild(el('div', { class: 'banner info small', style: 'margin-top:0.75rem' },
+    'Before WPM shows your Personalization Points: download the sitemap above and upload it in Data Cloud Setup → Websites & Mobile Apps → your connector → Replace Sitemap. This registers this page’s content zones with the connector (one-time per demo/page).'));
 
   const a = d.artifacts || {};
   const nSchemas = (a.schemas || []).length;

@@ -12,7 +12,7 @@ const db = require('../db');
 const { requireAuth } = require('../auth/google');
 const { connectionFromRow } = require('../sf/client');
 const build = require('../html/build');
-const { injectSdk } = require('../html/inject-sdk');
+const { injectSdk, buildConnectorSitemap } = require('../html/inject-sdk');
 const deployer = require('../sf/deploy');
 const { cleanup } = require('../sf/cleanup');
 
@@ -171,6 +171,22 @@ router.get('/', async (req, res, next) => {
         artifacts: r.sf_artifacts,
       }))
     );
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/deployments/:id/sitemap — download the connector-uploadable sitemap.
+// The SE uploads this in Data Cloud Setup → Websites & Mobile Apps → connector
+// → Replace Sitemap, so WPM sees this page's content zones.
+router.get('/:id/sitemap', async (req, res, next) => {
+  try {
+    const row = await db.getDeployment(req.user.id, req.params.id);
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    const js = buildConnectorSitemap({ demoName: row.name });
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Content-Disposition', `attachment; filename="sp-demo-sitemap-${req.params.id}.js"`);
+    res.send(js);
   } catch (err) {
     next(err);
   }
