@@ -104,7 +104,10 @@ router.post('/', async (req, res, next) => {
       industry,
       formData: formData || {},
       generatedHtml,
-      sfArtifacts: deployResult,
+      // Store the artifacts object itself (schemas/transformers/pps + dcTse) so
+      // cleanup and the delete-confirm modal read the arrays directly. Keep the
+      // deploy mode alongside for reference.
+      sfArtifacts: { mode: deployResult.mode, ...(deployResult.artifacts || {}) },
       status: 'active',
       expiresAt: expiresAtFrom(expiry),
     });

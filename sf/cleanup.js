@@ -20,13 +20,16 @@ const DRY_RUN = String(process.env.CLEANUP_DRY_RUN || '').toLowerCase() === 'tru
 // artifacts: sf_artifacts JSON from deploy.js:
 //   { schemas:[{name,id}], transformers:[{name,id}], pps:[{name,id,zone}], ... }
 // Returns { mode, removed:[], orphans:[], dryRun }.
-async function cleanup(conn, artifacts) {
+async function cleanup(conn, artifactsRaw) {
   const removed = [];
   const orphans = [];
 
-  const pps = (artifacts && artifacts.pps) || [];
-  const transformers = (artifacts && artifacts.transformers) || [];
-  const schemas = (artifacts && artifacts.schemas) || [];
+  // Tolerate both shapes: the artifacts object itself, or an older wrapper that
+  // nested them under `.artifacts` (deploy result { mode, dcTse, artifacts }).
+  const artifacts = (artifactsRaw && artifactsRaw.artifacts) || artifactsRaw || {};
+  const pps = artifacts.pps || [];
+  const transformers = artifacts.transformers || [];
+  const schemas = artifacts.schemas || [];
 
   // Ordered list of [type, deleteFn, ref] to attempt.
   const targets = [
