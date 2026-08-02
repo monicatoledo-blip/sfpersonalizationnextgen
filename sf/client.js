@@ -9,7 +9,9 @@ const db = require('../db');
 const { encrypt, decrypt } = require('../crypto');
 const { oauth2, LOGIN_PROD, LOGIN_SANDBOX } = require('../auth/salesforce');
 
-const API_VERSION = process.env.SF_API_VERSION || '62.0';
+// Default to v67 — confirmed against the meshmesh SDO (the Personalization
+// Connect REST resources live under /services/data/v67.0/personalization/...).
+const API_VERSION = process.env.SF_API_VERSION || '67.0';
 
 // row: a full sf_connections record (with *_enc BYTEA fields).
 function connectionFromRow(row) {

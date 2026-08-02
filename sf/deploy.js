@@ -1,47 +1,61 @@
 'use strict';
 
-// Programmatic creation of Salesforce Personalization objects in a connected SDO.
+// Programmatic creation of Salesforce Personalization objects in a connected SDO
+// via the Data 360 Personalization Connect REST API (see sf/p13n.js).
 //
-// IMPORTANT (see plan + handoff): PersonalizationPoint / PersonalizationSchema are
-// createable=false via standard REST. The supported path is the Metadata API
-// (jsforce `metadata.deploy` with .personalizationSchema-meta.xml /
-// .personalizationPoint-meta.xml components). This module:
-//   1. probes whether those metadata types are available at the target API version,
-//   2. if yes, builds a metadata package and deploys it,
-//   3. if no, returns a structured "manual steps" payload the SPA renders so the
-//      SE can create the objects by hand — never a silent failure.
+// Per demo we create a fully self-consistent, demo-prefixed set so many demos
+// coexist and per-demo teardown can delete exactly what it made:
+//   - 3 Content Schemas  (Hero Banner / Content Card / Category Hero)
+//   - 1 WebApp Handlebars Transformer for the hero (renders the image swap)
+//   - 3 Personalization Points, each bound to its schema + content zone
+//   - Personalization Decisions nested in each PP; the homepage-hero PP's
+//     decision carries the personalized hero image + copy from the simulator
+//     config, so the vanilla->personalized swap is a one-click in WPM.
 //
-// Naming: every object is prefixed with the demo name ("<Demo> - Web - ...") so
-// multiple demos coexist in one org and cleanup can scope by prefix.
-//
-// The three surfaces (must match html/inject-sdk.js content zones and the template):
-//   "Web - Homepage Hero"     -> zone homepage_hero
-//   "Web - Recommended Cards" -> zone recommended_cards
-//   "Web - Category Hero"     -> zone category_hero
+// The three surfaces (must match html/inject-sdk.js content zones and template):
+//   "Web - Homepage Hero"     -> zone homepage_hero     -> #warm-homepage-section
+//   "Web - Recommended Cards" -> zone recommended_cards -> .floating-cards-container
+//   "Web - Category Hero"     -> zone category_hero     -> #cat-hero
 
-const { API_VERSION } = require('./client');
+const p13n = require('./p13n');
+const { getMergedAdaptiveStory } = require('../data/generator');
 
-// Content Schema definitions — attribute shapes Monica validated manually in her SDO.
+const DEFAULT_DATA_SPACE = 'default';
+
+// Hero schema attributes. Names are the internal attribute names; the transformer
+// substitution vars point at these via [attributes].[<name>]. Kept internally
+// consistent (unlike the org's hand-built copy, which had a "backgoundImage" typo).
+const HERO_ATTRS = [
+  { name: 'BackgroundImageUrl', label: 'Background Image URL' },
+  { name: 'Header', label: 'Header' },
+  { name: 'Subheader', label: 'Subheader' },
+  { name: 'CallToActionText', label: 'CTA Text' },
+];
+
 const SCHEMA_DEFS = [
-  {
-    key: 'heroBanner',
-    label: 'Web - Hero Banner',
-    attributes: ['tagline', 'Headline', 'Subheadline', 'backgroundImage', 'ctaLabel'],
-  },
+  { key: 'heroBanner', label: 'Web - Hero Banner', attributes: HERO_ATTRS },
   {
     key: 'contentCard',
     label: 'Web - Content Card',
-    attributes: ['title', 'description', 'thumbnail', 'tag', 'ctaLabel'],
+    attributes: [
+      { name: 'Title', label: 'Title' },
+      { name: 'Description', label: 'Description' },
+      { name: 'Thumbnail', label: 'Thumbnail' },
+      { name: 'CallToActionText', label: 'CTA Text' },
+    ],
   },
   {
     key: 'categoryHero',
     label: 'Web - Category Hero',
-    // Corrected shape (the manual SDO copy accidentally inherited Hero Banner's attrs).
-    attributes: ['headline', 'backgroundImage', 'badgeText'],
+    attributes: [
+      { name: 'Header', label: 'Header' },
+      { name: 'BackgroundImageUrl', label: 'Background Image URL' },
+      { name: 'BadgeText', label: 'Badge Text' },
+    ],
   },
 ];
 
-// Personalization Point definitions, each bound to a Content Schema + content zone.
+// Personalization Points, each bound to a Content Schema + content zone.
 const PP_DEFS = [
   { key: 'homepageHero', label: 'Web - Homepage Hero', schemaKey: 'heroBanner', zone: 'homepage_hero' },
   { key: 'recommendedCards', label: 'Web - Recommended Cards', schemaKey: 'contentCard', zone: 'recommended_cards' },
@@ -52,131 +66,154 @@ function prefixed(demoName, label) {
   return `${demoName} - ${label}`;
 }
 
-// Probe Metadata API describe for the personalization component types.
-// Returns { supported: bool, types: string[] }.
-async function checkMetadataSupport(conn) {
-  try {
-    const meta = await conn.metadata.describe(API_VERSION);
-    const names = (meta.metadataObjects || []).map((m) => m.xmlName);
-    const want = ['PersonalizationSchema', 'PersonalizationPoint'];
-    const present = want.filter((w) => names.includes(w));
-    return { supported: present.length === want.length, types: present, available: names.length };
-  } catch (err) {
-    return { supported: false, types: [], error: err.message };
+// A Connect-REST-safe API name: letters, numbers, underscores; no leading digit.
+function apiName(label) {
+  return String(label)
+    .replace(/[^A-Za-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/^(\d)/, '_$1');
+}
+
+// Hero transformer HTML — mirrors the org's known-good hero transformer, driven
+// by subVars that map 1:1 to the hero schema attributes.
+function heroTransformerHtml() {
+  return [
+    '<style>',
+    '.sfdcep-banner{margin:0 auto;width:100%;min-height:600px;display:flex;flex-flow:column wrap;justify-content:center;font-family:Arial,Helvetica,sans-serif;background-size:cover;background-position:center;}',
+    '.sfdcep-banner-header{font-size:32px;padding-bottom:24px;font-weight:600;color:#fff;text-align:center;text-shadow:0 1px 4px rgba(0,0,0,.4);}',
+    '.sfdcep-banner-subheader{font-size:20px;font-weight:400;color:#fff;text-align:center;padding-bottom:24px;text-shadow:0 1px 4px rgba(0,0,0,.4);}',
+    '</style>',
+    "<div class=\"sfdcep-banner\" style=\"background:url('{{subVar 'BackgroundImageUrl'}}') no-repeat center/cover;\">",
+    "  <div class=\"sfdcep-banner-header\">{{subVar 'Header'}}</div>",
+    "  <div class=\"sfdcep-banner-subheader\">{{subVar 'Subheader'}}</div>",
+    '</div>',
+  ].join('\n');
+}
+
+function heroSubstitutionDefinitions() {
+  const defs = {};
+  for (const a of HERO_ATTRS) {
+    defs[a.name] = {
+      configType: 'SchemaPath',
+      defaultValue: `[attributes].[${a.name}]`,
+      label: a.name,
+      overridable: true,
+      required: false,
+    };
   }
+  return defs;
 }
 
-// Build the manual-steps fallback payload (rendered in the SPA when Metadata API
-// can't create these types at the org's API version).
-function manualSteps(demoName) {
-  const schemas = SCHEMA_DEFS.map((s) => ({
-    name: prefixed(demoName, s.label),
-    personalizationType: 'ManualContent',
-    attributes: s.attributes,
-  }));
-  const pps = PP_DEFS.map((p) => ({
-    name: prefixed(demoName, p.label),
-    source: 'PersonalizationApp',
-    contentZone: p.zone,
-    boundSchema: prefixed(demoName, SCHEMA_DEFS.find((s) => s.key === p.schemaKey).label),
-  }));
-  return {
-    mode: 'manual',
-    message:
-      'Personalization objects cannot be created via the Metadata API at this org’s API version. Create them manually in Setup, then attach the hosted URL in WPM.',
-    schemas,
-    personalizationPoints: pps,
-  };
+// Build the personalized-hero attribute values from the simulator form config.
+// The "after" (personalized) state = the warm hero image + headline the page
+// renders; images are Cloudinary URLs stored as-is. Falls back gracefully when
+// the demo was created from an uploaded file (no formData).
+function heroDecisionAttributeValues(formData) {
+  const fd = formData || {};
+  const story = (() => {
+    try {
+      return getMergedAdaptiveStory(fd) || {};
+    } catch (_) {
+      return {};
+    }
+  })();
+  const image = String(fd.adaptiveHeroImageUrl || fd.adaptiveColdHeroUrl || '').trim();
+  const header = String(story.landingPageTitle || story.vanillaHeroTitle || '').trim();
+  const subheader = String(story.landingPageSubtitle || story.vanillaHeroSubtext || '').trim();
+  const cta = String(story.homepageCtaText || story.intentTriggerText || 'Learn more').trim();
+  const values = [
+    { attributeName: 'BackgroundImageUrl', value: image },
+    { attributeName: 'Header', value: header },
+    { attributeName: 'Subheader', value: subheader },
+    { attributeName: 'CallToActionText', value: cta },
+  ];
+  return values.filter((v) => v.value);
 }
 
-// --- Metadata package builders -------------------------------------------------
-
-function escapeXml(s) {
-  return String(s).replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' }[c]));
-}
-
-function schemaMetaXml(def, fullName) {
-  const attrs = def.attributes
-    .map(
-      (a) =>
-        `  <attributes>\n    <name>${escapeXml(a)}</name>\n    <dataType>Text</dataType>\n  </attributes>`
-    )
-    .join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<PersonalizationSchema xmlName="PersonalizationSchema" fullName="${escapeXml(fullName)}">
-  <masterLabel>${escapeXml(fullName)}</masterLabel>
-  <personalizationType>ManualContent</personalizationType>
-${attrs}
-</PersonalizationSchema>`;
-}
-
-function ppMetaXml(def, fullName, schemaFullName) {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<PersonalizationPoint xmlName="PersonalizationPoint" fullName="${escapeXml(fullName)}">
-  <masterLabel>${escapeXml(fullName)}</masterLabel>
-  <source>PersonalizationApp</source>
-  <schema>${escapeXml(schemaFullName)}</schema>
-</PersonalizationPoint>`;
-}
-
-// Assemble the in-memory metadata package (list of {type, fullName, xml}).
-function buildPackage(demoName) {
-  const components = [];
-  const artifactPlan = { schemas: [], pps: [] };
-
-  for (const def of SCHEMA_DEFS) {
-    const fullName = prefixed(demoName, def.label);
-    components.push({ type: 'PersonalizationSchema', fullName, xml: schemaMetaXml(def, fullName) });
-    artifactPlan.schemas.push({ key: def.key, fullName });
+// Decisions per PP. Homepage hero gets the personalized content; the other two
+// get a single fallback decision so WPM has something to bind.
+function decisionsFor(ppKey, demoName, formData) {
+  if (ppKey === 'homepageHero') {
+    return [
+      {
+        name: apiName(prefixed(demoName, 'Personalized Hero')),
+        label: 'Personalized Hero',
+        attributeValues: heroDecisionAttributeValues(formData),
+        state: 'Live',
+      },
+    ];
   }
-  for (const def of PP_DEFS) {
-    const fullName = prefixed(demoName, def.label);
-    const schemaFullName = prefixed(demoName, SCHEMA_DEFS.find((s) => s.key === def.schemaKey).label);
-    components.push({ type: 'PersonalizationPoint', fullName, xml: ppMetaXml(def, fullName, schemaFullName) });
-    artifactPlan.pps.push({ key: def.key, fullName, zone: def.zone });
-  }
-  return { components, artifactPlan };
+  return [
+    {
+      name: apiName(prefixed(demoName, `${ppKey} Default`)),
+      label: 'Default',
+      attributeValues: [],
+      state: 'Live',
+    },
+  ];
 }
 
-// --- Public API ----------------------------------------------------------------
-
-// deploy(conn, { demoName, decisions }) -> {mode:'deployed', artifacts} | {mode:'manual', ...}
-// `decisions` is reserved for the Personalization Decision content payloads
-// (created after schemas/PPs exist); wired in a follow-up once the metadata path
-// is verified against a real org.
-async function deploy(conn, { demoName }) {
+// deploy(conn, { demoName, dataSpaceName?, profileDataGraphName, formData })
+//   -> { mode:'deployed', dcTse, artifacts } | throws on hard failure
+// artifacts: { schemas:[{name,id}], transformers:[{name,id}], pps:[{name,id,zone}], dataSpaceName }
+async function deploy(conn, opts) {
+  const { demoName, profileDataGraphName, formData } = opts || {};
   if (!demoName) throw new Error('deploy: demoName is required');
+  if (!profileDataGraphName) throw new Error('deploy: profileDataGraphName is required');
+  const dataSpaceName = (opts && opts.dataSpaceName) || DEFAULT_DATA_SPACE;
 
-  const support = await checkMetadataSupport(conn);
-  if (!support.supported) {
-    return { ...manualSteps(demoName), metadataSupport: support };
+  const { dcTse } = await p13n.getOrgInfo(conn);
+
+  const artifacts = { schemas: [], transformers: [], pps: [], dataSpaceName, dcTse };
+
+  // 1. Content Schemas.
+  const schemaNameByKey = {};
+  for (const def of SCHEMA_DEFS) {
+    const name = apiName(prefixed(demoName, def.label));
+    const created = await p13n.createSchema(conn, {
+      name,
+      label: prefixed(demoName, def.label),
+      dataSpaceName,
+      attributes: def.attributes,
+    });
+    schemaNameByKey[def.key] = name;
+    artifacts.schemas.push({ key: def.key, name, id: created.id });
   }
 
-  const { components, artifactPlan } = buildPackage(demoName);
+  // 2. Hero transformer (bound to the hero schema).
+  const heroTransformerName = apiName(prefixed(demoName, 'Web - Hero Experience Template'));
+  const t = await p13n.createTransformer(conn, {
+    name: heroTransformerName,
+    label: prefixed(demoName, 'Web - Hero Experience Template'),
+    dataSpace: dataSpaceName,
+    schemaReference: schemaNameByKey.heroBanner,
+    substitutionDefinitions: heroSubstitutionDefinitions(),
+    html: heroTransformerHtml(),
+  });
+  artifacts.transformers.push({ name: heroTransformerName, id: t.id, schemaKey: 'heroBanner' });
 
-  // NOTE: this is intentionally guarded. Before running a real metadata.deploy()
-  // against Monica's SDO we confirm the Metadata Coverage Report supports these
-  // types at the target API version (handoff "stop and ask"). Until then, callers
-  // can pass { dryRun: true } to get the package back without deploying.
-  return {
-    mode: 'ready',
-    metadataSupport: support,
-    components: components.map((c) => ({ type: c.type, fullName: c.fullName })),
-    artifactPlan,
-    note:
-      'Metadata types are available. Deploy is gated pending Metadata Coverage confirmation against the target org (see handoff).',
-    // The actual deploy call, once unblocked, looks like:
-    //   const zip = buildMetadataZip(components);
-    //   const result = await conn.metadata.deploy(zip, { singlePackage: true }).complete();
-  };
+  // 3. Personalization Points (+ nested decisions).
+  for (const def of PP_DEFS) {
+    const name = apiName(prefixed(demoName, def.label));
+    const created = await p13n.createPoint(conn, {
+      name,
+      label: prefixed(demoName, def.label),
+      dataSpaceName,
+      profileDataGraphName,
+      source: 'PersonalizationApp',
+      schemaName: schemaNameByKey[def.schemaKey],
+      decisions: decisionsFor(def.key, demoName, formData),
+    });
+    artifacts.pps.push({ key: def.key, name, id: created.id, zone: def.zone });
+  }
+
+  return { mode: 'deployed', dcTse, artifacts };
 }
 
 module.exports = {
   deploy,
-  checkMetadataSupport,
-  buildPackage,
-  manualSteps,
+  apiName,
+  prefixed,
   SCHEMA_DEFS,
   PP_DEFS,
-  prefixed,
 };

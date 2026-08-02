@@ -244,52 +244,79 @@ function renderNewDemo() {
   const useCaseSel = el('select', { id: 'useCaseSel' });
   const primaryInput = el('input', { type: 'color', id: 'primaryColor', value: prefill.adaptivePrimaryColor || '#2a94d6' });
   const accentInput = el('input', { type: 'color', id: 'accentColor', value: prefill.adaptiveAccentColor || '#0176d3' });
+  // Profile Data Graph to bind Personalization Points to. Auto-discovery via API
+  // is unreliable (graphs aren't queryable as SOQL objects), so this is an
+  // editable field pre-filled with the org's known graph.
+  const dataGraphInput = el('input', {
+    type: 'text', id: 'dataGraphName',
+    value: prefill.profileDataGraphName || 'Marketing_Content_Personalizat',
+    placeholder: 'e.g. Marketing_Content_Personalizat',
+  });
 
+  // Demo name — always used (form OR upload).
   form.appendChild(el('label', {}, 'Demo name'));
   form.appendChild(nameInput);
-  form.appendChild(el('label', {}, 'Industry template'));
-  form.appendChild(industrySel);
-  form.appendChild(el('label', {}, 'Use case / vignette'));
-  form.appendChild(useCaseSel);
-  form.appendChild(el('label', {}, 'Brand name'));
-  form.appendChild(brandInput);
-  form.appendChild(
+
+  // Generator-only fields — IGNORED when a file is uploaded, so group them in a
+  // dimmable block with a heading that clarifies the "configure it here" path.
+  const configFields = el('div', { class: 'config-fields' }, [
+    el('div', { class: 'config-fields-head small muted' }, 'Configure the experience'),
+    el('label', {}, 'Industry template'), industrySel,
+    el('label', {}, 'Use case / vignette'), useCaseSel,
+    el('label', {}, 'Brand name'), brandInput,
     el('div', { class: 'field-row' }, [
       el('div', {}, [el('label', {}, 'Primary color'), primaryInput]),
       el('div', {}, [el('label', {}, 'Accent color'), accentInput]),
-    ])
-  );
+    ]),
+  ]);
+  form.appendChild(configFields);
 
-  // Optional: bring your own downloaded HTML instead of using the form config.
   _uploadedHtml = null;
-  const uploadStatus = el('div', { class: 'small muted', style: 'margin-top:0.5rem' });
-  const fileInput = el('input', { type: 'file', accept: '.html,text/html', style: 'padding:0.5rem' });
+  const uploadStatus = el('div', { class: 'small muted', style: 'margin-top:0.75rem' });
+  const fileInput = el('input', { type: 'file', accept: '.html,text/html', id: 'uploadFile', style: 'display:none' });
+  const chooseBtn = el('button', {
+    type: 'button', class: 'btn secondary upload-btn',
+    onclick: () => fileInput.click(),
+  }, 'Choose downloaded HTML file…');
+
+  const uploadCard = el('div', { class: 'card upload-card', style: 'margin-top:1rem' }, [
+    el('strong', {}, 'Upload a downloaded experience'),
+    el('p', { class: 'small muted', style: 'margin:0.35rem 0 0.75rem' },
+      'Skip the form and host an HTML file you downloaded from the Experience Generator’s Adaptive Web experience. We host it as-is and inject the Data Cloud SDK + content zones. Uploading a file overrides the form fields above.'),
+    chooseBtn, fileInput, uploadStatus,
+  ]);
+
+  const setFileMode = (on) => {
+    configFields.classList.toggle('dimmed', on);
+    uploadCard.classList.toggle('active', on);
+  };
+
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files && e.target.files[0];
-    if (!file) { _uploadedHtml = null; uploadStatus.textContent = ''; return; }
+    if (!file) { _uploadedHtml = null; uploadStatus.textContent = ''; setFileMode(false); return; }
     const reader = new FileReader();
     reader.onload = () => {
       _uploadedHtml = String(reader.result || '');
       const ok = /warm-homepage-section|floating-cards-container|cat-hero/.test(_uploadedHtml);
-      uploadStatus.className = ok ? 'small' : 'banner error small';
-      uploadStatus.style.marginTop = '0.5rem';
+      uploadStatus.className = ok ? 'banner success small' : 'banner error small';
+      uploadStatus.style.marginTop = '0.75rem';
+      chooseBtn.textContent = ok ? `✓ ${file.name}` : 'Choose downloaded HTML file…';
       uploadStatus.textContent = ok
-        ? `Using uploaded file: ${file.name} (${Math.round(_uploadedHtml.length / 1024)} KB). Form fields above are ignored.`
+        ? `Hosting “${file.name}” (${Math.round(_uploadedHtml.length / 1024)} KB) as-is. The form fields above are ignored — only the demo name, Profile Data Graph, and this file are used.`
         : `“${file.name}” doesn’t look like an Adaptive Web export (content zones not found). It won’t work as a live demo.`;
       if (!ok) _uploadedHtml = null;
+      setFileMode(ok);
     };
     reader.readAsText(file);
   });
-  form.appendChild(
-    el('details', { style: 'margin-top:1.25rem' }, [
-      el('summary', { style: 'cursor:pointer; font-weight:600; font-size:14px; color:#2a94d6' },
-        'Have a downloaded HTML file? Upload it instead'),
-      el('p', { class: 'small muted', style: 'margin:0.5rem 0' },
-        'Use the HTML you downloaded from the Experience Generator’s Adaptive Web experience. We host it as-is and inject the Data Cloud SDK + content zones. When a file is uploaded, the form fields above are ignored.'),
-      fileInput,
-      uploadStatus,
-    ])
-  );
+  form.appendChild(uploadCard);
+
+  // Profile Data Graph — always applies (form OR upload), so it lives outside the
+  // dimmable block, below the two source options.
+  form.appendChild(el('label', { style: 'margin-top:1.25rem; display:block' }, 'Profile Data Graph'));
+  form.appendChild(dataGraphInput);
+  form.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
+    'The Data Cloud Profile Data Graph the Personalization Points bind to. Applies whether you configure the form or upload a file.'));
 
   const statusArea = el('div', { id: 'deployStatus', style: 'margin-top:1.25rem' });
   const deployBtn = el('button', { class: 'btn', onclick: () => runDeploy() },
@@ -331,6 +358,9 @@ async function runPrereqCheck(card, conn) {
       const cls = ok === true ? 'ok' : ok === false ? 'err' : 'unknown';
       return el('li', {}, [el('span', { class: 'status-dot ' + cls }), label + (chk && chk.detail ? ' — ' + chk.detail : '')]);
     };
+    // Stash discovered Profile Data Graphs so deploy can bind PPs to one.
+    const pdg = pre.checks.profileDataGraph || {};
+    state.profileDataGraphs = Array.isArray(pdg.graphs) ? pdg.graphs : [];
     box.className = 'card';
     box.innerHTML = '';
     box.appendChild(el('strong', {}, pre.ready ? 'Prerequisites OK' : 'Prerequisites incomplete'));
@@ -363,12 +393,26 @@ async function runDeploy() {
     adaptiveAccentColor: $('#accentColor').value,
   };
 
-  const steps = ['Checking prerequisites', 'Creating Content Schemas', 'Creating Personalization Points', 'Creating Decisions', 'Generating hosted URL', 'Done'];
+  const steps = ['Creating Content Schemas', 'Creating Experience Template', 'Creating Personalization Points + Decisions', 'Generating hosted URL', 'Done'];
   const stepList = el('ul', { class: 'steps' }, steps.map((s) => el('li', {}, s)));
   statusArea.innerHTML = '';
   statusArea.appendChild(stepList);
   const setStep = (i, cls) => { if (stepList.children[i]) stepList.children[i].className = cls; };
   setStep(0, 'active');
+
+  // Bind PPs to a Profile Data Graph. Prefer the explicit field; fall back to a
+  // graph the prerequisites check discovered (when API discovery worked).
+  const graphs = state.profileDataGraphs || [];
+  const profileDataGraphName =
+    ($('#dataGraphName') && $('#dataGraphName').value.trim()) ||
+    (graphs[0] && (graphs[0].name || graphs[0].id)) ||
+    undefined;
+  if (!profileDataGraphName) {
+    setStep(0, 'error');
+    statusArea.appendChild(el('div', { class: 'banner error' },
+      'A Profile Data Graph name is required to create Personalization Points. Enter one in the Profile Data Graph field.'));
+    return;
+  }
 
   try {
     const result = await api('POST', '/api/deployments', {
@@ -376,6 +420,7 @@ async function runDeploy() {
       connectionId: conn.id,
       industry: formData.adaptiveWebSubIndustry,
       formData,
+      profileDataGraphName,
       uploadedHtml: usingUpload ? _uploadedHtml : undefined,
       expiry: 'never',
     });
@@ -387,31 +432,63 @@ async function runDeploy() {
   }
 }
 
+// Turn a raw P13N/Connect error message into an SE-actionable troubleshooting
+// hint. Returns null when we have nothing specific to add.
+function troubleshootHint(errMsg) {
+  const m = String(errMsg || '').toLowerCase();
+  if (/data ?graph|profiledatagraph|profile data graph/.test(m)) {
+    return 'The Profile Data Graph name may be wrong or missing in this org. Check the exact API name in Data Cloud Setup → Data Graphs and re-enter it in the Profile Data Graph field. A Profile Data Graph requires a configured Data Cloud data model.';
+  }
+  if (/not.*enabled|not.*support|does not exist.*personalization/.test(m)) {
+    return 'Personalization may not be fully enabled in this org. Confirm the prerequisites above are green before deploying.';
+  }
+  if (/duplicate|already exists/.test(m)) {
+    return 'An object with this name already exists — a demo with the same name may have been deployed before. Use a different demo name, or delete the earlier demo from Manage Demos first.';
+  }
+  if (/criteria/.test(m)) {
+    return 'Decision criteria cannot be set via API — this should not happen from the app; report it.';
+  }
+  return null;
+}
+
 function renderPostDeploy(result, conn) {
+  const d = result.deploy || {};
+  const failed = d.mode === 'error';
   const box = el('div', { class: 'card', style: 'margin-top:1rem' });
-  box.appendChild(el('h3', {}, 'Deployed'));
-  box.appendChild(
-    el('div', { class: 'hosted-url' }, [
-      el('span', {}, result.hostedUrl),
-    ])
-  );
+  box.appendChild(el('h3', {}, failed ? 'Deploy incomplete' : 'Deployed'));
+
+  if (failed) {
+    // Object creation failed. The hosted page may still exist, but WPM won't
+    // work without the objects, so lead with the error + how to fix it.
+    box.appendChild(el('div', { class: 'banner error small' }, 'Personalization object creation failed: ' + (d.error || 'unknown error')));
+    const hint = troubleshootHint(d.error);
+    if (hint) box.appendChild(el('div', { class: 'banner info small', style: 'margin-top:0.5rem' }, hint));
+    box.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.5rem' },
+      'Fix the issue above and deploy again. No partial demo was left usable; remove any leftover objects from Manage Demos if needed.'));
+    return box;
+  }
+
+  box.appendChild(el('div', { class: 'hosted-url' }, [el('span', {}, result.hostedUrl)]));
   box.appendChild(
     el('div', { style: 'margin-top:0.75rem; display:flex; gap:0.5rem' }, [
       el('button', { class: 'btn secondary', onclick: () => navigator.clipboard.writeText(result.hostedUrl) }, 'Copy Link'),
       el('a', { class: 'btn secondary', href: result.hostedUrl, target: '_blank' }, 'Open in New Tab'),
-      el('a', { class: 'btn secondary', href: (conn.instance_url || '') + '/lightning/n/Personalization', target: '_blank' }, 'Open WPM'),
+      // Real WPM: open the hosted page with the activation param. The Web SDK
+      // prompts SF login and overlays the Web Personalization Manager.
+      el('a', { class: 'btn', href: result.hostedUrl + '?sf_personalization_wpm', target: '_blank' }, 'Open in WPM'),
     ])
   );
 
-  // Deploy mode messaging (metadata gated / manual fallback).
-  const d = result.deploy || {};
-  if (d.mode === 'manual') {
-    box.appendChild(el('div', { class: 'banner info small', style: 'margin-top:1rem' }, d.message || 'Create the Personalization objects manually.'));
-  } else if (d.mode === 'ready') {
-    box.appendChild(el('div', { class: 'banner info small', style: 'margin-top:1rem' }, d.note || 'Metadata deploy is gated pending verification.'));
-  } else if (d.mode === 'error') {
-    box.appendChild(el('div', { class: 'banner error small', style: 'margin-top:1rem' }, 'SP object creation error: ' + d.error));
-  }
+  const a = d.artifacts || {};
+  const nSchemas = (a.schemas || []).length;
+  const nPps = (a.pps || []).length;
+  const beaconLive = !!d.dcTse;
+  box.appendChild(el('div', { class: 'banner success small', style: 'margin-top:1rem' },
+    `Created ${nSchemas} Content Schemas + ${nPps} Personalization Points in data space “${a.dataSpaceName || 'default'}”.`));
+  box.appendChild(el('div', { class: beaconLive ? 'banner info small' : 'banner warn small', style: 'margin-top:0.5rem' },
+    beaconLive
+      ? 'Web SDK beacon is live. Click “Open in WPM” to author experiences on the hosted page.'
+      : 'Beacon could not be wired (tenant endpoint not found) — the page renders but WPM will not attach. Re-check org prerequisites, then redeploy.'));
   return box;
 }
 

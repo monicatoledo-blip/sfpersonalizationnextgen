@@ -145,7 +145,9 @@ async function findProfileDataGraph(conn, callMs = 8000) {
   return {
     ok: null,
     detail:
-      'Could not query Data Graph metadata via API. Verify a Profile Data Graph exists in Data Cloud Setup manually.',
+      'Could not list Data Graphs via API (this is common — they are not always API-queryable). ' +
+      'If you know your Profile Data Graph, enter its API name in the Profile Data Graph field before deploying. ' +
+      'To find or create one: Data Cloud Setup → Data Graphs. A Profile Data Graph requires a configured Data Cloud data model (unified Individual + mappings).',
   };
 }
 

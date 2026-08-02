@@ -5,9 +5,9 @@
 //
 // Content zones (fixed — must match the template surfaces and the PP names the
 // deployer creates):
-//   homepage_hero     -> #warm-homepage-section  -> PP "Web - Homepage Hero"
-//   recommended_cards -> .floating-cards-container -> PP "Web - Recommended Cards"
-//   category_hero     -> #cat-hero               -> PP "Web - Category Hero"
+//   homepage_hero     -> #warm-homepage-section    -> PP "Web - Homepage Hero"
+//   recommended_cards -> .floating-cards-container  -> PP "Web - Recommended Cards"
+//   category_hero     -> #cat-hero                  -> PP "Web - Category Hero"
 
 const CONTENT_ZONES = [
   { name: 'homepage_hero', selector: '#warm-homepage-section' },
@@ -15,26 +15,40 @@ const CONTENT_ZONES = [
   { name: 'category_hero', selector: '#cat-hero' },
 ];
 
-// tenantId: the Data Cloud Web SDK beacon tenant/connector id for the org.
-// If not yet known (Website Connector is a one-time manual step per SDO), we
-// still inject the sitemap init but comment the beacon so the page renders and
-// the SE can paste the tenant id in later without a redeploy.
-function buildSnippet({ tenantId } = {}) {
+// Build the live beacon script URL from the org's tenant-specific endpoint.
+// getOrgInfo returns dcTse as a bare host (e.g. "mfq...-gnt...c360a.salesforce.com");
+// tolerate a value that already includes a scheme.
+function beaconUrlFromDcTse(dcTse) {
+  if (!dcTse) return null;
+  const host = String(dcTse).replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return `https://${host}/scripts/c360a.min.js`;
+}
+
+// opts:
+//   dcTse:     Data Cloud tenant-specific endpoint (from p13n.getOrgInfo). When
+//              present, the LIVE beacon is injected so WPM (?sf_personalization_wpm)
+//              can attach. When absent, the beacon is commented out so the page
+//              still renders and can be regenerated once the org is known.
+//   dataSpace: the Data Cloud data space the PPs live in (default 'default').
+//              WPM lists a page's PPs by the data space declared in the sitemap.
+function buildSnippet({ dcTse, dataSpace } = {}) {
   const sitemap = {
+    dataSpace: dataSpace || 'default',
     global: {
       contentZones: CONTENT_ZONES,
     },
   };
 
-  const beacon = tenantId
-    ? `<script src="https://cdn.c360a.salesforce.com/beacon/c360a/${tenantId}/scripts/c360a.min.js"></script>`
-    : `<!-- Data Cloud Web SDK beacon: set the Website Connector tenant id for this SDO to enable.
-     <script src="https://cdn.c360a.salesforce.com/beacon/c360a/{{tenantId}}/scripts/c360a.min.js"></script> -->`;
+  const beaconUrl = beaconUrlFromDcTse(dcTse);
+  const beacon = beaconUrl
+    ? `<script src="${beaconUrl}"></script>`
+    : `<!-- Data Cloud Web SDK beacon: set the org's tenant endpoint (dcTse) to enable.
+     <script src="https://{{dcTse}}/scripts/c360a.min.js"></script> -->`;
 
   return `
 ${beacon}
 <script>
-  // SP Demo Builder — sitemap content zones for WPM / Personalization.
+  // SP Demo Builder — sitemap content zones + data space for WPM / Personalization.
   (function initSalesforceInteractions() {
     function boot() {
       if (typeof SalesforceInteractions === 'undefined') return;
@@ -67,4 +81,4 @@ function injectSdk(html, opts = {}) {
   return snippet + html;
 }
 
-module.exports = { injectSdk, buildSnippet, CONTENT_ZONES };
+module.exports = { injectSdk, buildSnippet, beaconUrlFromDcTse, CONTENT_ZONES };

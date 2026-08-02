@@ -37,7 +37,7 @@ function expiresAtFrom(presetKey) {
 // POST /api/deployments
 router.post('/', async (req, res, next) => {
   try {
-    const { name, industry, formData, connectionId, expiry, tenantId, uploadedHtml } = req.body || {};
+    const { name, industry, formData, connectionId, expiry, uploadedHtml, profileDataGraphName, dataSpaceName } = req.body || {};
     if (!name || !connectionId) {
       return res.status(400).json({ error: 'name and connectionId are required' });
     }
@@ -62,19 +62,32 @@ router.post('/', async (req, res, next) => {
     } else {
       baseHtml = build.render(formData || {});
     }
-    const generatedHtml = injectSdk(baseHtml, { tenantId });
 
-    // 2. Create SP objects in the SDO (gated — see sf/deploy.js). We capture
-    //    whatever the deployer returns into sf_artifacts.
+    // 2. Create SP objects in the SDO via the Personalization Connect REST API.
+    //    Done BEFORE SDK injection so the discovered tenant endpoint (dcTse) and
+    //    data space can be baked into the live beacon + sitemap.
     const conn = connectionFromRow(connRow);
     let deployResult;
     try {
-      deployResult = await deployer.deploy(conn, { demoName: name });
+      deployResult = await deployer.deploy(conn, {
+        demoName: name,
+        profileDataGraphName,
+        dataSpaceName,
+        formData: formData || {},
+      });
     } catch (err) {
       deployResult = { mode: 'error', error: err.message };
     }
 
-    // 3. Persist the deployment.
+    // 3. Inject the Web SDK. If the deploy discovered a tenant endpoint, the
+    //    beacon is live and WPM can attach; otherwise it's commented out and the
+    //    sitemap still initializes (page renders, regenerate later).
+    const generatedHtml = injectSdk(baseHtml, {
+      dcTse: deployResult.dcTse || (deployResult.artifacts && deployResult.artifacts.dcTse) || null,
+      dataSpace: dataSpaceName || (deployResult.artifacts && deployResult.artifacts.dataSpaceName) || 'default',
+    });
+
+    // 4. Persist the deployment.
     const row = await db.createDeployment({
       userId: req.user.id,
       sfConnectionId: connectionId,
@@ -143,10 +156,16 @@ router.put('/:id', async (req, res, next) => {
     const existing = await db.getDeployment(req.user.id, req.params.id);
     if (!existing) return res.status(404).json({ error: 'not_found' });
 
-    const { name, industry, formData, expiry, tenantId } = req.body || {};
+    const { name, industry, formData, expiry } = req.body || {};
     const nextFormData = formData || existing.form_data;
     const rendered = build.render(nextFormData);
-    const generatedHtml = injectSdk(rendered, { tenantId });
+    // Reuse the tenant endpoint + data space discovered at deploy time so a
+    // regenerate keeps the live beacon wired.
+    const priorArtifacts = existing.sf_artifacts || {};
+    const generatedHtml = injectSdk(rendered, {
+      dcTse: priorArtifacts.dcTse || null,
+      dataSpace: priorArtifacts.dataSpaceName || 'default',
+    });
 
     const updated = await db.updateDeployment(req.user.id, req.params.id, {
       name: name || existing.name,

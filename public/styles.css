@@ -271,6 +271,16 @@ table.demos th {
 .banner.error { background: #fdeaea; color: #ba0517; border: 1px solid #f5c2c2; }
 .banner.ok { background: #e3f6e9; color: #2e844a; border: 1px solid #b7e4c5; }
 .banner.info { background: #eaf4fc; color: #17618e; border: 1px solid #bfddf5; }
+.banner.success { background: #e3f6e9; color: #2e844a; border: 1px solid #b7e4c5; }
+.banner.warn { background: #fef5e7; color: #8a5a00; border: 1px solid #f5d99a; }
+
+/* New Demo: two source paths (configure vs upload). */
+.config-fields { transition: opacity .2s ease; }
+.config-fields.dimmed { opacity: .4; pointer-events: none; }
+.config-fields-head { font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin: 0.25rem 0 0.5rem; }
+.upload-card { border: 1px dashed #bcccdc; background: #f8fafc; }
+.upload-card.active { border-color: #2e844a; background: #f2fbf5; }
+.upload-btn { width: 100%; }
 
 .hosted-url {
   background: #f5f7fa; border: 1px solid #d1d5db; border-radius: 10px;
