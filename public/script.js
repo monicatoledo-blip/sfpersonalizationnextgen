@@ -261,7 +261,10 @@ function renderNewDemo() {
   // Data Cloud Setup → Websites & Mobile Apps → your connector → install code.
   const connectorInput = el('input', {
     type: 'text', id: 'connectorId',
-    value: prefill.connector || '',
+    // Pre-fill the known meshmesh Website connector so the live beacon is wired
+    // by default — leaving it blank injects a commented-out beacon and WPM can't
+    // attach. Editable for other orgs/connectors.
+    value: prefill.connector || 'cec9b1f4-0e16-4c62-923d-afd61d237da0',
     placeholder: 'connector id (UUID) or full https://cdn.c360a.salesforce.com/beacon/... URL',
   });
 
@@ -427,6 +430,13 @@ async function runDeploy() {
     setStep(0, 'error');
     statusArea.appendChild(el('div', { class: 'banner error' },
       'A Profile Data Graph name is required to create Personalization Points. Enter one in the Profile Data Graph field.'));
+    return;
+  }
+
+  // Warn (don't block) if the connector is blank — the demo will host but WPM
+  // won't attach without a live beacon. This has bitten us repeatedly.
+  const connectorVal = ($('#connectorId') && $('#connectorId').value.trim()) || '';
+  if (!connectorVal && !confirm('No Website connector is set, so WPM will NOT attach to this page (the beacon will be inactive). Deploy anyway?')) {
     return;
   }
 
