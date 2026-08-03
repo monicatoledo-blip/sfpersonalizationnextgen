@@ -76,21 +76,28 @@ function extractHeroContent(html) {
 // attribute order. Returns up to 3 cards; null if the grid isn't found.
 function extractInsightCards(html) {
   if (!html || typeof html !== 'string') return null;
-  // Scope to the warm cards grid; take a generous window covering 3 cards.
+
+  // Determine the scope containing the warm cards. NOTE: card <img> src can be a
+  // multi-MB base64 data URI (offline-inlined downloads), so a small fixed
+  // window can truncate mid-card. Scope generously — from the grid/heading to
+  // the end of the warm homepage section (or a large cap).
+  let scope = null;
   const gridRe = /id=["']warm-insights-grid["'][^>]*>/i;
   const gm = gridRe.exec(html);
-  let scope;
   if (gm) {
-    const start = gm.index + gm[0].length;
-    scope = html.slice(start, start + 12000);
+    scope = html.slice(gm.index + gm[0].length);
   } else {
-    // Fallback: within the warm homepage section, after the "Market Insights"
-    // heading (covers files generated before the grid id was added).
-    const warm = sliceById(html, 'warm-homepage-section');
-    if (!warm) return null;
-    const mi = warm.search(/Market Insights/i);
-    scope = mi >= 0 ? warm.slice(mi, mi + 12000) : warm;
+    // Fallback for files without the grid id (pre-anchor downloads): locate the
+    // WARM homepage section, then the "Market Insights" heading within it.
+    const warmStart = html.search(/id=["']warm-homepage-section["']/i);
+    if (warmStart < 0) return null;
+    const from = html.slice(warmStart);
+    const mi = from.search(/Market Insights/i);
+    scope = mi >= 0 ? from.slice(mi) : from;
   }
+  // Cap the scope generously (enough for 3 base64-laden cards) so the article
+  // regex isn't fed the entire multi-MB document.
+  if (scope.length > 6000000) scope = scope.slice(0, 6000000);
 
   // Split into <article ...>...</article> blocks (the cards).
   const cards = [];
@@ -98,7 +105,11 @@ function extractInsightCards(html) {
   let am;
   while ((am = artRe.exec(scope)) && cards.length < 3) {
     const block = am[1];
-    const image = firstMatch(/<img[^>]*\bsrc=["']([^"']+)["']/i, block).trim();
+    let image = firstMatch(/<img[^>]*\bsrc=["']([^"']+)["']/i, block).trim();
+    // A base64/blob card image can't be stored in a Personalization Decision
+    // (and shouldn't be uploaded per-card). Drop it so the card's text still
+    // lands; the Experience Generator now keeps card images as real URLs.
+    if (/^(data:|blob:)/i.test(image)) image = '';
     // The eyebrow/category is the small uppercase <div> in the card body — NOT
     // the first <div> (that's the image wrapper). Match the div sitting just
     // before the <h3> title; fall back to the "uppercase" utility class.
