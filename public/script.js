@@ -246,7 +246,7 @@ function resetNewDemo() {
 
 // Stepper header (1 Ready · 2 Bring experience · 3 Target & deploy).
 function buildStepper(current) {
-  const steps = [['Ready', 1], ['Bring experience', 2], ['Target & deploy', 3]];
+  const steps = [['Ready', 1], ['Bring experience', 2], ['Review & deploy', 3]];
   const wrap = el('div', { class: 'stepper' });
   steps.forEach(([label, n], i) => {
     const cls = n < current ? 'done' : n === current ? 'active' : '';
@@ -302,7 +302,7 @@ function renderNewDemo() {
   const refreshStepper = () => { stepperHost.innerHTML = ''; stepperHost.appendChild(buildStepper(_newDemoStep)); };
 
   const form = el('div');
-  const nameInput = el('input', { type: 'text', id: 'demoName', placeholder: 'e.g. AYCO Warm Homepage v1', value: prefill.demoName || '' });
+  const nameInput = el('input', { type: 'text', id: 'demoName', placeholder: 'e.g. Cumulus Warm Homepage v1', value: prefill.demoName || '' });
   const brandInput = el('input', { type: 'text', id: 'brandName', value: prefill.adaptiveBrandName || 'Cumulus Bank' });
   const industrySel = el('select', { id: 'industrySel' });
   const useCaseSel = el('select', { id: 'useCaseSel' });
@@ -382,13 +382,39 @@ function renderNewDemo() {
   });
   // ---- Assemble the three step sections (inputs above are reused as-is). ----
 
-  // STEP 1 — org readiness (populated by runReadinessCheck). Gates step 2.
+  // STEP 1 — org readiness + org-side prework (Profile Data Graph is placed
+  // inline in the readiness host; the Website connector block is below it).
   const step1 = el('div', { class: 'step-section' });
   const readinessHost = el('div');
   step1.appendChild(el('h3', {}, 'First — is your org ready?'));
   step1.appendChild(el('p', { class: 'step-hint' },
-    'We check the connected SDO for what a live Personalization demo needs. Fix anything red, then re-check.'));
+    'A live Personalization demo needs a bit of one-time setup in the SDO. Confirm each item below, then re-check.'));
   step1.appendChild(readinessHost);
+
+  // Website connector — org prework (configured once in the SDO). Lives in
+  // Step 1 with a how-to card; connectorInput is the same element the deploy
+  // reads. Placed outside readinessHost so a re-check doesn't wipe it.
+  const connectorBlock = el('div', { style: 'margin-top:20px; padding-top:18px; border-top:1px solid #e8eaed' }, [
+    el('h3', { style: 'font-size:15px' }, 'Website connector (one-time SDO setup)'),
+    el('div', { class: 'banner info small callout-flex', style: 'margin-top:8px' }, [
+      el('div', { class: 'callout-icon' }, 'i'),
+      el('div', {}, [
+        el('div', { html: '<strong>New to this? Set up a Website connector once per org.</strong>' }),
+        el('ol', { class: 'small', style: 'margin:6px 0 0 1.1rem; line-height:1.6' }, [
+          el('li', { html: 'In the SDO: <code>Data Cloud Setup → Websites &amp; Mobile Apps → New</code>, create a <strong>Website</strong> connector.' }),
+          el('li', { html: 'Open the connector and copy its <strong>connector id</strong> (a UUID) — or the whole <code>&lt;script src&gt;</code> from its Web SDK install snippet.' }),
+          el('li', 'Paste it below. This drives the live beacon that makes WPM attach to your hosted page.'),
+        ]),
+        el('div', { class: 'small', style: 'margin-top:8px' },
+          'After your first deploy on this connector you’ll upload a sitemap once (we give you the file + steps). It’s the same for every demo, so later demos on this SDO skip it.'),
+      ]),
+    ]),
+    el('label', {}, 'Website connector id'),
+    connectorInput,
+    el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
+      'Leave blank to host the page without a live beacon (WPM won’t attach — fine for a preview, not for a live demo).'),
+  ]);
+  step1.appendChild(connectorBlock);
 
   // STEP 2 — bring your experience (name + source choice: form OR upload).
   const step2 = el('div', { class: 'step-section hidden' });
@@ -433,22 +459,15 @@ function renderNewDemo() {
   step2.appendChild(formPanel);
 
   const step2back = el('button', { class: 'btn secondary', onclick: () => goStep(1) }, '← Back');
-  const step2next = el('button', { class: 'btn', onclick: () => goStep(3) }, 'Next: target & deploy →');
+  const step2next = el('button', { class: 'btn', onclick: () => goStep(3) }, 'Next: review & deploy →');
   step2.appendChild(el('div', { class: 'step-actions' }, [step2back, step2next]));
 
-  // STEP 3 — target + deploy (Profile Data Graph, connector, deploy button).
+  // STEP 3 — review + deploy. The Profile Data Graph and Website connector are
+  // both org prework set in Step 1; this step is the final review + launch.
   const step3 = el('div', { class: 'step-section hidden' });
-  step3.appendChild(el('h3', {}, 'Target & deploy'));
+  step3.appendChild(el('h3', {}, 'Review & deploy'));
   step3.appendChild(el('p', { class: 'step-hint' },
-    'These bind your Personalization Points to Data Cloud and wire the live WPM beacon. Pre-filled for this org.'));
-  step3.appendChild(el('label', {}, 'Profile Data Graph'));
-  step3.appendChild(dataGraphInput);
-  step3.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
-    'The Data Cloud Profile Data Graph the Personalization Points bind to. WPM won’t list points bound to a batch/marketing graph.'));
-  step3.appendChild(el('label', { style: 'margin-top:1.25rem; display:block' }, 'Website connector (for live WPM)'));
-  step3.appendChild(connectorInput);
-  step3.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
-    'Makes WPM attach to the page. Paste your Website connector id (UUID) or the whole Web SDK <script src> URL. In Data Cloud Setup → Websites & Mobile Apps → your connector. Leave blank to host without a live beacon (WPM won’t attach).'));
+    'Everything’s set: your org checks passed, your experience is chosen, and the connector + Profile Data Graph were confirmed in Step 1. Launch when ready.'));
 
   const statusArea = el('div', { id: 'deployStatus', style: 'margin-top:1.25rem' });
   const deployBtn = el('button', { class: 'btn', onclick: () => runDeploy() },
@@ -493,8 +512,9 @@ function renderNewDemo() {
     if (prefill.adaptiveWebSubUseCase) useCaseSel.value = prefill.adaptiveWebSubUseCase;
   });
 
-  // Step 1 readiness check on load; controls the gate into step 2.
-  runReadinessCheck(readinessHost, conn, () => goStep(2));
+  // Step 1 readiness check on load; controls the gate into step 2. The graph
+  // field is placed inline at the Profile Data Graph check.
+  runReadinessCheck(readinessHost, conn, () => goStep(2), dataGraphInput);
 
   goStep(_newDemoStep);
   return card;
@@ -502,7 +522,7 @@ function renderNewDemo() {
 
 // Step 1: check org prerequisites, render them as the readiness gate, and
 // enable "Next" only when ready. Same API call + graph-stashing as before.
-async function runReadinessCheck(host, conn, onNext) {
+async function runReadinessCheck(host, conn, onNext, dataGraphInput) {
   host.innerHTML = '';
   if (!conn) { host.appendChild(el('div', { class: 'banner error small' }, 'No connected org.')); return; }
   host.appendChild(el('div', { class: 'banner info small' }, 'Checking org prerequisites…'));
@@ -520,7 +540,7 @@ async function runReadinessCheck(host, conn, onNext) {
     const pdg = pre.checks.profileDataGraph || {};
     state.profileDataGraphs = Array.isArray(pdg.graphs) ? pdg.graphs : [];
 
-    const row = (key, title, chk) => {
+    const row = (key, title, chk, extra) => {
       const ok = !!(chk && chk.ok);
       return el('li', {}, [
         el('div', { class: 'rd-icon ' + (ok ? 'ok' : 'err') }, ok ? '✓' : '!'),
@@ -528,15 +548,50 @@ async function runReadinessCheck(host, conn, onNext) {
           el('div', { class: 'rd-title' }, title),
           chk && chk.detail ? el('div', { class: 'rd-detail' }, chk.detail) : null,
           !ok && FIX[key] ? el('div', { class: 'rd-fix' }, FIX[key]) : null,
+          extra || null,
         ]),
       ]);
     };
+
+    // Profile Data Graph is special: the API often can't LIST graphs even when
+    // the org has one (they aren't reliably SOQL-queryable). So three states:
+    //  - found graphs        -> green, confirmed automatically
+    //  - couldn't list (ready) -> INFO (blue), not an error: confirm the API
+    //    name in the field shown right here (the field the deploy reads)
+    //  - genuinely not ready -> red with the fix hint
+    const pdgOk = !!(pre.checks.profileDataGraph && pre.checks.profileDataGraph.ok);
+    const graphs = state.profileDataGraphs || [];
+    const couldNotList = pdgOk && graphs.length === 0;
+
+    // The #dataGraphName field lives HERE now (moved out of Step 3), right where
+    // the SE is told to enter it. Same element the deploy reads.
+    const graphField = el('div', { class: 'rd-graph-field' }, [
+      el('label', { style: 'margin-top:2px' }, 'Profile Data Graph (API name)'),
+      dataGraphInput,
+      el('div', { class: 'rd-detail', style: 'margin-top:4px' },
+        'The real-time Data Cloud graph your Personalization Points bind to. Confirm the exact API name — find it in Data Cloud Setup → Data Graphs.'),
+    ]);
+
+    let pdgRow;
+    if (couldNotList) {
+      pdgRow = el('li', {}, [
+        el('div', { class: 'rd-icon info' }, 'i'),
+        el('div', { class: 'rd-body' }, [
+          el('div', { class: 'rd-title' }, 'Real-time Profile Data Graph'),
+          el('div', { class: 'rd-detail' },
+            'Couldn’t auto-list Data Graphs via API (common — they’re not always queryable). Confirm your graph’s API name below; if it exists, you’re good to deploy.'),
+          graphField,
+        ]),
+      ]);
+    } else {
+      pdgRow = row('profileDataGraph', 'Real-time Profile Data Graph', pre.checks.profileDataGraph, pdgOk ? graphField : null);
+    }
 
     host.innerHTML = '';
     host.appendChild(el('ul', { class: 'readiness-list' }, [
       row('personalization', 'Personalization enabled', pre.checks.personalization),
       row('personalizationSchema', 'Personalization schema access', pre.checks.personalizationSchema),
-      row('profileDataGraph', 'Real-time Profile Data Graph', pre.checks.profileDataGraph),
+      pdgRow,
     ]));
 
     const ready = !!pre.ready;
@@ -549,7 +604,7 @@ async function runReadinessCheck(host, conn, onNext) {
     ]));
 
     host.appendChild(el('div', { class: 'step-actions' }, [
-      el('button', { class: 'btn secondary', onclick: () => runReadinessCheck(host, conn, onNext) }, 'Re-check org'),
+      el('button', { class: 'btn secondary', onclick: () => runReadinessCheck(host, conn, onNext, dataGraphInput) }, 'Re-check org'),
       el('button', { class: 'btn', disabled: ready ? null : 'true', onclick: () => { if (_newDemoReady) onNext(); } },
         'Next: bring your experience →'),
     ]));
@@ -557,7 +612,7 @@ async function runReadinessCheck(host, conn, onNext) {
     host.innerHTML = '';
     host.appendChild(el('div', { class: 'banner error small' }, 'Prerequisite check failed: ' + e.message));
     host.appendChild(el('div', { class: 'step-actions' }, [
-      el('button', { class: 'btn secondary', onclick: () => runReadinessCheck(host, conn, onNext) }, 'Re-check org'),
+      el('button', { class: 'btn secondary', onclick: () => runReadinessCheck(host, conn, onNext, dataGraphInput) }, 'Re-check org'),
       el('span', {}),
     ]));
   }
@@ -678,9 +733,11 @@ function renderPostDeploy(result, conn) {
       el('a', { class: 'btn secondary', href: '/api/deployments/' + result.id + '/sitemap' }, 'Download Sitemap'),
     ])
   );
-  // One-time connector step so WPM sees this page's content zones + PPs.
+  // One-time-per-CONNECTOR step so WPM sees the content zones + PPs. The sitemap
+  // content is the same for every demo (fixed content zones), so it only needs
+  // uploading the first time you use a given connector/SDO — not per demo.
   box.appendChild(el('div', { class: 'banner info small', style: 'margin-top:0.75rem' },
-    'Before WPM shows your Personalization Points: download the sitemap above and upload it in Data Cloud Setup → Websites & Mobile Apps → your connector → Replace Sitemap. This registers this page’s content zones with the connector (one-time per demo/page).'));
+    'First time using this connector? Download the sitemap above and upload it once in Data Cloud Setup → Websites & Mobile Apps → your connector → Replace Sitemap. It registers the content zones WPM reads. You only do this once per connector — future demos on the same SDO don’t need it (a net-new SDO/connector does).'));
 
   const a = d.artifacts || {};
   const nSchemas = (a.schemas || []).length;
@@ -705,8 +762,8 @@ function buildWpmGuide() {
   guide.appendChild(el('p', { class: 'step-hint' },
     'Follow these in order. Skip step 1 and your Personalization Points won’t show up in WPM — the #1 gotcha.'));
   const steps = [
-    { n: '1', tip: false, title: 'Upload the sitemap to your connector',
-      html: 'Click <strong>Download Sitemap</strong> above, then in <code>Setup → Data Cloud → Websites &amp; Mobile Apps → your connector → Replace Sitemap</code>, upload it. This registers this page’s content zones so WPM knows where your points live. One-time per demo page.' },
+    { n: '1', tip: false, title: 'Upload the sitemap to your connector (first time only)',
+      html: 'Click <strong>Download Sitemap</strong> above, then in <code>Setup → Data Cloud → Websites &amp; Mobile Apps → your connector → Replace Sitemap</code>, upload it. This registers the content zones WPM reads. <strong>Once per connector</strong> — the sitemap is the same for every demo, so future demos on this SDO skip this step. Only a net-new SDO/connector needs it again.' },
     { n: '2', tip: false, title: 'Open the page in WPM',
       html: 'Click <strong>Open in WPM</strong>. Sign into Salesforce when prompted — the Web Personalization Manager overlays the live page.' },
     { n: '3', tip: false, title: 'Why your points appear (the unlock)',
