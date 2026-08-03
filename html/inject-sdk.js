@@ -10,15 +10,19 @@
 // dropdown; `selector` is the stable DOM anchor; `key` is the snake_case id.
 // The two experiences the deployer actually builds PPs for (must match
 // sf/deploy.js PP_DEFS and the real DOM anchors on the adaptive-web page):
-//   homepage_hero  -> #warm-homepage-section  (the returning-visitor hero)
-//   market_insights -> #warm-insights-grid     (the 3 "Market Insights" cards)
+//   homepage_hero    -> #warm-homepage-section  (the returning-visitor hero)
+//   market_insight_n -> #warm-insight-n          (each of the 3 Market Insights cards)
 // Both live inside the warm (personalized) homepage. Earlier phantom zones
 // (#cat-hero, .floating-cards-container, #home-flow-sections, category/landing
 // surfaces) were removed — they aren't present on this page, so WPM would bind
 // to nothing. Re-add a zone here ONLY when a real, stable DOM anchor exists.
 const CONTENT_ZONES = [
   { key: 'homepage_hero', name: 'Homepage Hero', selector: '#warm-homepage-section' },
-  { key: 'market_insights', name: 'Market Insights', selector: '#warm-insights-grid' },
+  // Market Insights = one zone per card (WPM caps element overrides per PP, so
+  // each card is its own PP). Anchors are ids on each warm .home-insight-card.
+  { key: 'market_insight_1', name: 'Market Insight Card 1', selector: '#warm-insight-1' },
+  { key: 'market_insight_2', name: 'Market Insight Card 2', selector: '#warm-insight-2' },
+  { key: 'market_insight_3', name: 'Market Insight Card 3', selector: '#warm-insight-3' },
 ];
 
 // Build the live Data Cloud Web SDK beacon URL.
