@@ -332,6 +332,8 @@ table.demos th {
 
 /* ---- Source choice (Step 2) ---- */
 .source-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px 0 4px; }
+/* Gated until the demo name is entered — dim + block interaction. */
+.source-choice.gated { opacity: 0.45; filter: grayscale(0.4); pointer-events: none; }
 .source-opt {
   border: 2px solid #d7dee6; border-radius: 12px; padding: 18px 18px 16px; cursor: pointer;
   transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; background: #fff;

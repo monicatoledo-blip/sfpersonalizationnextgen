@@ -423,6 +423,9 @@ function renderNewDemo() {
     'Start from an Adaptive Web file you downloaded in the Experience Generator, or build one here. Pick one — they don’t mix.'));
   step2.appendChild(el('label', {}, 'Demo name'));
   step2.appendChild(nameInput);
+  const nameHint = el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
+    'Name your demo first — then choose how to bring in your experience below.');
+  step2.appendChild(nameHint);
 
   const uploadPanel = el('div', { class: 'source-panel' }, [
     el('div', { class: 'banner warn callout-flex' }, [
@@ -439,19 +442,28 @@ function renderNewDemo() {
   const formPanel = el('div', { class: 'source-panel' }, [configFields]);
 
   const sourceChoice = el('div', { class: 'source-choice' });
+  // The demo name gates the source choice: no name -> the cards + panels are
+  // dimmed/disabled so an SE can't pick a file before naming the demo (and then
+  // miss the name entirely). Enabled live as they type.
+  const hasName = () => nameInput.value.trim().length > 0;
   const applySource = () => {
+    const locked = !hasName();
+    sourceChoice.classList.toggle('gated', locked);
+    if (locked) _newDemoSource = null; // clear any prior pick while unnamed
     sourceChoice.querySelectorAll('.source-opt').forEach((o) => o.classList.toggle('selected', o.dataset.src === _newDemoSource));
-    uploadPanel.classList.toggle('hidden', _newDemoSource !== 'upload');
-    formPanel.classList.toggle('hidden', _newDemoSource !== 'form');
-    step2next.disabled = !_newDemoSource;
+    uploadPanel.classList.toggle('hidden', locked || _newDemoSource !== 'upload');
+    formPanel.classList.toggle('hidden', locked || _newDemoSource !== 'form');
+    nameHint.classList.toggle('hidden', !locked);
+    step2next.disabled = locked || !_newDemoSource;
   };
   const sourceOpt = (key, title, desc) => el('div', {
     class: 'source-opt', 'data-src': key,
-    onclick: () => { _newDemoSource = key; applySource(); },
+    onclick: () => { if (!hasName()) { nameInput.focus(); return; } _newDemoSource = key; applySource(); },
   }, [
     el('div', { class: 'so-title' }, [el('span', { class: 'so-radio' }), title]),
     el('div', { class: 'so-desc' }, desc),
   ]);
+  nameInput.addEventListener('input', applySource);
   sourceChoice.appendChild(sourceOpt('upload', 'Upload a downloaded file', 'Host the Adaptive Web HTML you exported from the Experience Generator. Recommended — it’s the exact creative your customer sees.'));
   sourceChoice.appendChild(sourceOpt('form', 'Design it here', 'Pick an industry + use case and set brand colors. Good for a quick generic demo.'));
   step2.appendChild(sourceChoice);
