@@ -553,18 +553,17 @@ async function runReadinessCheck(host, conn, onNext, dataGraphInput) {
       ]);
     };
 
-    // Profile Data Graph is special: the API often can't LIST graphs even when
-    // the org has one (they aren't reliably SOQL-queryable). So three states:
-    //  - found graphs        -> green, confirmed automatically
-    //  - couldn't list (ready) -> INFO (blue), not an error: confirm the API
-    //    name in the field shown right here (the field the deploy reads)
-    //  - genuinely not ready -> red with the fix hint
-    const pdgOk = !!(pre.checks.profileDataGraph && pre.checks.profileDataGraph.ok);
+    // Profile Data Graph: the deploy ALWAYS needs its API name, and the API
+    // often can't LIST graphs even when the org has one (they aren't reliably
+    // queryable). So the #dataGraphName field is ALWAYS shown right here, and
+    // the icon reflects detection rather than gating:
+    //  - found graphs via API -> green (auto-confirmed)
+    //  - didn't/couldn't list  -> blue info: confirm the API name in the field
+    // We never show this as a hard red error — an empty API listing is expected,
+    // and the field lets the SE proceed with the known graph name.
     const graphs = state.profileDataGraphs || [];
-    const couldNotList = pdgOk && graphs.length === 0;
+    const foundGraph = graphs.length > 0;
 
-    // The #dataGraphName field lives HERE now (moved out of Step 3), right where
-    // the SE is told to enter it. Same element the deploy reads.
     const graphField = el('div', { class: 'rd-graph-field' }, [
       el('label', { style: 'margin-top:2px' }, 'Profile Data Graph (API name)'),
       dataGraphInput,
@@ -572,20 +571,16 @@ async function runReadinessCheck(host, conn, onNext, dataGraphInput) {
         'The real-time Data Cloud graph your Personalization Points bind to. Confirm the exact API name — find it in Data Cloud Setup → Data Graphs.'),
     ]);
 
-    let pdgRow;
-    if (couldNotList) {
-      pdgRow = el('li', {}, [
-        el('div', { class: 'rd-icon info' }, 'i'),
-        el('div', { class: 'rd-body' }, [
-          el('div', { class: 'rd-title' }, 'Real-time Profile Data Graph'),
-          el('div', { class: 'rd-detail' },
-            'Couldn’t auto-list Data Graphs via API (common — they’re not always queryable). Confirm your graph’s API name below; if it exists, you’re good to deploy.'),
-          graphField,
-        ]),
-      ]);
-    } else {
-      pdgRow = row('profileDataGraph', 'Real-time Profile Data Graph', pre.checks.profileDataGraph, pdgOk ? graphField : null);
-    }
+    const pdgRow = el('li', {}, [
+      el('div', { class: 'rd-icon ' + (foundGraph ? 'ok' : 'info') }, foundGraph ? '✓' : 'i'),
+      el('div', { class: 'rd-body' }, [
+        el('div', { class: 'rd-title' }, 'Real-time Profile Data Graph'),
+        el('div', { class: 'rd-detail' }, foundGraph
+          ? `Found ${graphs.length} data graph${graphs.length === 1 ? '' : 's'} via API. Confirm the one to bind to below.`
+          : 'Couldn’t auto-list Data Graphs via API (common — they’re not always queryable). That’s fine: confirm your real-time graph’s API name below. If it doesn’t exist yet, create one in Data Cloud Setup → Data Graphs (Real-Time type on your Unified Individual), then re-check.'),
+        graphField,
+      ]),
+    ]);
 
     host.innerHTML = '';
     host.appendChild(el('ul', { class: 'readiness-list' }, [

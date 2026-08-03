@@ -50,9 +50,10 @@
         checks: {
           personalization: { ok: true, detail: 'Data 360 Personalization is on.' },
           personalizationSchema: { ok: true, detail: 'App can create Content Schemas.' },
-          profileDataGraph: READY
-            ? { ok: true, detail: 'Found “Real_Time_Personalization”.', graphs: [{ name: 'Real_Time_Personalization' }] }
-            : { ok: false, detail: 'No real-time profile data graph in data space “default”.', graphs: [] },
+          // Mirrors the LIVE meshmesh case: check reports ok:false because the
+          // API couldn't LIST graphs, but overall ready:true. The field must
+          // still render here (regression this harness state guards against).
+          profileDataGraph: { ok: false, detail: 'Could not list Data Graphs via API (this is common — they are not always API-queryable).', graphs: [] },
         },
       },
       deployments: [
