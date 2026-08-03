@@ -71,12 +71,27 @@ function requireAuth(req, res, next) {
   return res.status(401).json({ error: 'unauthenticated' });
 }
 
+// Only allow redirecting back to a same-origin path (starts with a single "/",
+// not "//" or "/\" which browsers treat as protocol-relative). Prevents an
+// open-redirect via ?returnTo. Returns a safe path or null.
+function safeReturnTo(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  if (raw[0] !== '/') return null;
+  if (raw[1] === '/' || raw[1] === '\\') return null;
+  return raw;
+}
+
 // Registers the Google auth routes on the app.
 function registerRoutes(app) {
   app.get('/auth/google', (req, res, next) => {
     if (!process.env.GOOGLE_CLIENT_ID) {
       return res.status(503).json({ error: 'google_auth_not_configured' });
     }
+    // Preserve where the SE started (e.g. "/?config=..." from the Experience
+    // Generator handoff) across the OAuth round-trip. Stashed in the session so
+    // it survives the redirect to Google and back.
+    const rt = safeReturnTo(req.query.returnTo);
+    if (rt) req.session.returnTo = rt;
     return passport.authenticate('google', {
       scope: ['profile', 'email'],
       prompt: 'select_account',
@@ -92,7 +107,11 @@ function registerRoutes(app) {
       }
       req.logIn(user, (loginErr) => {
         if (loginErr) return next(loginErr);
-        return res.redirect('/');
+        // Restore the pre-sign-in destination (validated) exactly once, so the
+        // handoff config prefill isn't lost when a first-time SE signs in.
+        const dest = safeReturnTo(req.session.returnTo) || '/';
+        delete req.session.returnTo;
+        return res.redirect(dest);
       });
     })(req, res, next);
   });

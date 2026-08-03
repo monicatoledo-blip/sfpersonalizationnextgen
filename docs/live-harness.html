@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SP Demo Builder — LIVE code harness (stubbed backend)</title>
+  <link rel="stylesheet" href="../public/styles.css" />
+  <style>
+    .harness-ribbon { background:#1a202c; color:#fff; text-align:center; font-size:12px; padding:6px 12px; }
+    .harness-ribbon strong { color:#7cc7f0; }
+  </style>
+</head>
+<body>
+  <div class="harness-ribbon">
+    <strong>LIVE CODE HARNESS</strong> — runs the REAL public/script.js with a fake backend (no org, no deploy). Toggle the URL: add <code>?config=...</code> to test the handoff.
+  </div>
+  <header>
+    <div class="header-content">
+      <img src="https://image.s4.sfmc-content.com/lib/fe3111727664047b741079/m/1/ccb17401-00ab-42c3-b141-7a1b93f23360.png" alt="Cumulus Financial" class="header-logo" />
+      <div class="header-text">
+        <h1>SP Demo Builder</h1>
+        <p>Spin up a live Salesforce Personalization web demo in a connected SDO</p>
+      </div>
+    </div>
+  </header>
+  <section class="component-control-bar">
+    <div class="control-bar-content">
+      <div class="control-bar-left" id="navControls"></div>
+      <div class="control-bar-right" id="headerControls"></div>
+    </div>
+  </section>
+  <main id="app"></main>
+  <footer class="app-footer"><p>Built for Salesforce Solution Engineers · Created by Monica Toledo</p></footer>
+  <div id="modalRoot"></div>
+
+  <script>
+    // ---- Stub the backend BEFORE loading the real script.js ----
+    // Returns fake data for every endpoint the SPA calls, so the real UI code
+    // runs end-to-end in the browser with no server. Deploy/delete are faked.
+    const READY = true; // flip to false to preview the not-ready org gate
+    const FAKE = {
+      me: { id: 'u1', email: 'monica.toledo@salesforce.com', name: 'Monica Toledo' },
+      connections: [{ id: 'c1', org_alias: 'meshmesh SDO', org_id: '00Dxx', instance_url: 'https://storm.my.salesforce.com', is_sandbox: false }],
+      catalog: { industries: [
+        { key: 'fins', label: 'Financial Services', useCases: [{ key: 'warm', name: 'Warm homepage — returning customer' }, { key: 'auto', name: 'Auto loan cross-sell' }] },
+        { key: 'retail', label: 'Retail', useCases: [{ key: 'browse', name: 'Browse abandonment' }] },
+      ] },
+      prerequisites: {
+        ready: READY,
+        checks: {
+          personalization: { ok: true, detail: 'Data 360 Personalization is on.' },
+          personalizationSchema: { ok: true, detail: 'App can create Content Schemas.' },
+          profileDataGraph: READY
+            ? { ok: true, detail: 'Found “Real_Time_Personalization”.', graphs: [{ name: 'Real_Time_Personalization' }] }
+            : { ok: false, detail: 'No real-time profile data graph in data space “default”.', graphs: [] },
+        },
+      },
+      deployments: [
+        { id: 'd1', name: 'AYCO Warm Homepage v1', orgAlias: 'meshmesh SDO', status: 'active', createdAt: Date.now() - 86400000, artifacts: { schemas: [{ name: 'x - Web - Hero Banner' }], transformers: [{ name: 'x - Hero Template' }], pps: [{ name: 'x - Homepage Hero' }] } },
+      ],
+    };
+    const okJson = (data) => Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve(JSON.stringify(data)) });
+    window.fetch = (path, opts = {}) => {
+      const method = (opts.method || 'GET').toUpperCase();
+      if (path === '/api/me') return okJson(FAKE.me);
+      if (path === '/api/sf/connections') return okJson(FAKE.connections);
+      if (path === '/api/sf/catalog') return okJson(FAKE.catalog);
+      if (/\/api\/sf\/.*\/prerequisites/.test(path)) return okJson(FAKE.prerequisites);
+      if (path === '/api/deployments' && method === 'GET') return okJson(FAKE.deployments);
+      if (path === '/api/deployments' && method === 'POST') {
+        return okJson({ id: 'newid', name: 'Demo', hostedUrl: 'https://personalizationnextgen.example/e/newid', status: 'active',
+          deploy: { mode: 'deployed', connector: 'cec9b1f4', artifacts: { schemas: [1,2,3], pps: [1,2,3], dataSpaceName: 'default', connector: 'cec9b1f4' } } });
+      }
+      if (/\/api\/deployments\/.*/.test(path) && method === 'DELETE') return okJson({ ok: true, cleanup: { mode: 'complete' } });
+      return okJson({});
+    };
+  </script>
+  <script src="../public/script.js"></script>
+</body>
+</html>

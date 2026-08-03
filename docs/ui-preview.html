@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SP Demo Builder — UI Preview (mockup, no backend)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap");
+
+    /* ============================================================
+       SP Demo Builder — GUIDED JOURNEY PREVIEW
+       Standalone mockup. Fake data, no network, no real deploy.
+       Brand tokens lifted verbatim from the Experience Generator so
+       the two apps read as one product family:
+         primary blue #2a94d6 / gradient #47b4ea
+         green primary action #00ac5b
+         dark gradient footer, Open Sans headings, Salesforce Sans body
+       ============================================================ */
+
+    :root {
+      --blue: #2a94d6;
+      --blue-2: #47b4ea;
+      --green: #00ac5b;
+      --green-2: #00965e;
+      --danger: #ba0517;
+      --ink: #4f4f4f;
+      --ink-strong: #2b3a4a;
+      --muted: #6b7280;
+      --border: #e8eaed;
+      --bg: #f5f7fa;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html { min-height: 100%; }
+    body {
+      font-family: "Salesforce Sans", Arial, sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+    }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Preview-only ribbon so nobody mistakes this for the live app. */
+    .preview-ribbon {
+      background: #1a202c; color: #fff; text-align: center;
+      font-size: 12px; letter-spacing: .04em; padding: 6px 12px;
+    }
+    .preview-ribbon strong { color: #7cc7f0; }
+
+    /* Header */
+    header {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-2) 100%);
+      color: white; padding: 32px 40px; text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1); width: 100%; flex-shrink: 0;
+    }
+    .header-content {
+      max-width: 1400px; margin: 0 auto; display: flex;
+      align-items: center; justify-content: center; gap: 24px;
+    }
+    .header-logo { height: 60px; width: auto; }
+    .header-text { text-align: left; }
+    header h1 { font-family: "Open Sans", sans-serif; font-size: 32px; font-weight: 700; margin-bottom: 10px; }
+    header p { font-size: 16px; opacity: .95; margin: 0; }
+
+    /* Control bar / nav */
+    .component-control-bar {
+      background: #efefef; padding: 16px 40px; border-bottom: 3px solid var(--blue);
+      width: 100%; flex-shrink: 0;
+    }
+    .control-bar-content {
+      max-width: 1600px; margin: 0 auto; display: flex;
+      align-items: center; justify-content: space-between; gap: 20px;
+    }
+    .control-bar-left { display: flex; align-items: center; gap: 10px; }
+    .control-bar-right { display: flex; align-items: center; gap: 12px; }
+    .nav-tab {
+      font-family: "Salesforce Sans", Arial, sans-serif; font-size: 15px; font-weight: 600;
+      padding: 10px 18px; border: 1px solid var(--blue); border-radius: 6px;
+      background: #fff; color: var(--blue); cursor: pointer;
+      transition: background 120ms ease, box-shadow 120ms ease;
+    }
+    .nav-tab:hover { background: #f3f9fc; }
+    .nav-tab.active { background: var(--blue); color: #fff; box-shadow: 0 2px 6px rgba(42,148,214,.3); }
+    .user-email { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+
+    main#app { flex: 1 1 auto; width: 100%; max-width: 1000px; margin: 0 auto; padding: 32px 40px; }
+
+    .app-footer {
+      background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+      color: white; padding: 20px 40px; text-align: center; flex-shrink: 0;
+    }
+    .app-footer p { margin: 4px 0; font-size: 13px; opacity: .85; }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: "Salesforce Sans", Arial, sans-serif; font-size: 15px; font-weight: 600;
+      padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer;
+      transition: all .3s ease; line-height: 1;
+    }
+    .btn.primary, .btn:not(.secondary):not(.danger):not(.google):not(.ghost) {
+      background: linear-gradient(135deg, var(--green) 0%, var(--green-2) 100%);
+      color: #fff; box-shadow: 0 4px 12px rgba(0,172,91,.3);
+    }
+    .btn.primary:hover, .btn:not(.secondary):not(.danger):not(.google):not(.ghost):hover {
+      transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,172,91,.4);
+      background: linear-gradient(135deg, #009350 0%, #007d48 100%);
+    }
+    .btn:active { transform: translateY(0); }
+    .btn:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn.secondary {
+      background: #fff; color: var(--blue); border: 1px solid var(--blue);
+      box-shadow: none; padding: 10px 18px;
+    }
+    .btn.secondary:hover { background: #f3f9fc; transform: none; box-shadow: 0 0 0 3px rgba(42,148,214,.15); }
+    .btn.danger { background: var(--danger); color: #fff; box-shadow: none; }
+    .btn.danger:hover { background: #970414; transform: none; }
+    .btn.ghost { background: transparent; color: var(--muted); box-shadow: none; padding: 10px 14px; }
+    .btn.ghost:hover { color: var(--ink-strong); transform: none; }
+    .btn.small { padding: 8px 14px; font-size: 13px; }
+
+    /* Cards */
+    .card {
+      background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.04);
+      padding: 28px 32px; margin-bottom: 24px;
+    }
+    .card h2 { font-family: "Open Sans", sans-serif; font-size: 22px; font-weight: 700; color: var(--ink-strong); margin-bottom: 6px; }
+    .card h3 { font-family: "Open Sans", sans-serif; font-size: 17px; font-weight: 700; color: var(--ink-strong); margin-bottom: 8px; }
+
+    /* Forms */
+    label { display: block; font-weight: 600; font-size: 14px; color: var(--ink); margin: 16px 0 6px; }
+    input[type="text"], select {
+      width: 100%; min-height: 2.75rem; padding: .65rem .875rem;
+      border: 1px solid #d1d5db; border-radius: 10px;
+      font-family: "Salesforce Sans", Arial, sans-serif; font-size: 15px; background: #fff; color: var(--ink);
+    }
+    input[type="color"] { width: 100%; min-height: 2.75rem; padding: 4px; border: 1px solid #d1d5db; border-radius: 10px; background: #fff; cursor: pointer; }
+    input:focus, select:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(42,148,214,.15); }
+    .field-row { display: flex; gap: 16px; }
+    .field-row > div { flex: 1; }
+
+    /* Banners */
+    .banner { padding: 12px 16px; border-radius: 10px; margin-bottom: 16px; font-size: 14px; }
+    .banner.error { background: #fdeaea; color: var(--danger); border: 1px solid #f5c2c2; }
+    .banner.info { background: #eaf4fc; color: #17618e; border: 1px solid #bfddf5; }
+    .banner.success { background: #e3f6e9; color: #2e844a; border: 1px solid #b7e4c5; }
+    .banner.warn { background: #fef5e7; color: #8a5a00; border: 1px solid #f5d99a; }
+
+    .muted { color: var(--muted); }
+    .small { font-size: 13px; }
+    .hidden { display: none !important; }
+
+    /* ---- Stepper header (1 Source · 2 Target · 3 Deploy style) ---- */
+    .stepper { display: flex; align-items: center; gap: 0; margin: 4px 0 28px; }
+    .step-node { display: flex; align-items: center; gap: 10px; }
+    .step-dot {
+      width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; border: 2px solid #c7d0da; background: #fff; color: var(--muted);
+    }
+    .step-label { font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+    .step-line { flex: 1; height: 2px; background: #d7dee6; margin: 0 14px; min-width: 24px; }
+    .step-node.active .step-dot { border-color: var(--blue); color: var(--blue); box-shadow: 0 0 0 4px rgba(42,148,214,.15); }
+    .step-node.active .step-label { color: var(--blue); }
+    .step-node.done .step-dot { border-color: var(--green); background: var(--green); color: #fff; }
+    .step-node.done .step-label { color: #2e844a; }
+
+    .step-hint { font-size: 14px; color: var(--muted); margin: -2px 0 18px; }
+    .step-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 24px; }
+
+    /* ---- Readiness (Step 1) ---- */
+    .readiness-list { list-style: none; padding: 0; margin: 12px 0 4px; }
+    .readiness-list li {
+      display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border);
+    }
+    .readiness-list li:last-child { border-bottom: none; }
+    .rd-icon {
+      width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0; margin-top: 1px;
+      display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; color: #fff;
+    }
+    .rd-icon.ok { background: var(--green); }
+    .rd-icon.err { background: var(--danger); }
+    .rd-icon.checking { background: #c7d0da; }
+    .rd-body { flex: 1; }
+    .rd-title { font-weight: 600; color: var(--ink-strong); font-size: 15px; }
+    .rd-detail { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .rd-fix {
+      font-size: 13px; margin-top: 6px; padding: 8px 12px; border-radius: 8px;
+      background: #fef5e7; color: #8a5a00; border: 1px solid #f5d99a;
+    }
+    .rd-summary {
+      display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 10px; margin-top: 18px;
+    }
+    .rd-summary.ready { background: #e3f6e9; color: #2e844a; border: 1px solid #b7e4c5; }
+    .rd-summary.notready { background: #fef5e7; color: #8a5a00; border: 1px solid #f5d99a; }
+
+    /* ---- Source choice (Step 2) ---- */
+    .source-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 8px 0 4px; }
+    .source-opt {
+      border: 2px solid #d7dee6; border-radius: 12px; padding: 18px 18px 16px; cursor: pointer;
+      transition: border-color .15s ease, box-shadow .15s ease, background .15s ease; background: #fff;
+    }
+    .source-opt:hover { border-color: var(--blue); }
+    .source-opt.selected { border-color: var(--blue); background: #f3f9fc; box-shadow: 0 0 0 3px rgba(42,148,214,.12); }
+    .source-opt .so-title { font-weight: 700; color: var(--ink-strong); font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .source-opt .so-radio { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #b0b7c0; flex-shrink: 0; }
+    .source-opt.selected .so-radio { border-color: var(--blue); background: radial-gradient(circle, var(--blue) 0 5px, #fff 6px 100%); }
+    .source-opt .so-desc { font-size: 13px; color: var(--muted); margin-top: 6px; }
+    .source-panel { margin-top: 20px; padding-top: 4px; }
+    .upload-drop {
+      border: 2px dashed #bcccdc; background: #f8fafc; border-radius: 12px; padding: 26px; text-align: center;
+    }
+    .upload-drop.ok { border-color: var(--green); background: #f2fbf5; }
+
+    /* ---- Deploy progress (Step 3) ---- */
+    .steps { list-style: none; padding: 0; margin: 16px 0; }
+    .steps li { display: flex; align-items: center; gap: 10px; padding: 7px 0; color: var(--muted); font-size: 14px; }
+    .steps li::before { content: "○"; }
+    .steps li.done { color: #2e844a; } .steps li.done::before { content: "●"; }
+    .steps li.active { color: var(--blue); font-weight: 600; } .steps li.active::before { content: "◐"; }
+    .steps li.error { color: var(--danger); } .steps li.error::before { content: "✕"; }
+
+    .hosted-url {
+      background: var(--bg); border: 1px solid #d1d5db; border-radius: 10px; padding: 12px 14px;
+      font-family: ui-monospace, Menlo, monospace; font-size: 13px; word-break: break-all;
+    }
+
+    /* ---- Post-deploy WPM guide ---- */
+    .guide-hero {
+      background: linear-gradient(135deg, #e3f6e9 0%, #f2fbf5 100%);
+      border: 1px solid #b7e4c5; border-radius: 12px; padding: 20px 24px; margin-bottom: 20px;
+    }
+    .guide-hero h3 { color: #1b6b3a; }
+    .guide-step {
+      display: flex; gap: 14px; padding: 16px 0; border-bottom: 1px solid var(--border);
+    }
+    .guide-step:last-child { border-bottom: none; }
+    .guide-num {
+      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; background: var(--blue); color: #fff;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+    }
+    .guide-num.tip { background: #8a5a00; }
+    .guide-body { flex: 1; }
+    .guide-body .gb-title { font-weight: 700; color: var(--ink-strong); font-size: 15px; }
+    .guide-body .gb-text { font-size: 13.5px; color: var(--ink); margin-top: 4px; line-height: 1.5; }
+    .guide-body .gb-text code { background: #eef2f6; padding: 1px 6px; border-radius: 5px; font-size: 12.5px; }
+    .pill-note { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: #fff4dd; color: #8a5a00; margin-left: 8px; }
+
+    /* ---- Manage Demos (delete progress) ---- */
+    table.demos { width: 100%; border-collapse: collapse; }
+    table.demos th, table.demos td { text-align: left; padding: 12px 8px; border-bottom: 1px solid var(--border); font-size: 14px; }
+    table.demos th { color: var(--muted); font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: .05em; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .badge.active { background: #e3f6e9; color: #2e844a; }
+    .badge.deleting { background: #eaf4fc; color: #17618e; }
+    .badge.error { background: #fdeaea; color: var(--danger); }
+
+    .progress-track { height: 8px; background: #e6ebf0; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--blue), var(--blue-2)); border-radius: 999px; transition: width .4s ease; }
+    .del-log { list-style: none; padding: 0; margin: 10px 0 0; font-size: 13px; }
+    .del-log li { display: flex; align-items: center; gap: 8px; padding: 4px 0; color: var(--muted); }
+    .del-log li.done { color: #2e844a; } .del-log li.done::before { content: "●"; }
+    .del-log li.active { color: var(--blue); } .del-log li.active::before { content: "◐"; }
+    .del-log li.fail { color: var(--danger); } .del-log li.fail::before { content: "✕"; }
+    .del-log li.pending::before { content: "○"; }
+
+    /* Modal */
+    .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .modal { background: #fff; border-radius: 12px; padding: 28px 32px; max-width: 560px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+    .modal .id-list { font-family: ui-monospace, Menlo, monospace; font-size: 12px; background: var(--bg); padding: 12px; border-radius: 8px; white-space: pre-wrap; max-height: 220px; overflow: auto; margin-top: 8px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+
+    @media (max-width: 768px) {
+      .source-choice { grid-template-columns: 1fr; }
+      .header-content { flex-direction: column; gap: 12px; }
+      .header-text { text-align: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-ribbon">
+    <strong>PREVIEW MOCKUP</strong> — design only, fake data, nothing deploys. Click through to react to the flow.
+  </div>
+  <header>
+    <div class="header-content">
+      <img
+        src="https://image.s4.sfmc-content.com/lib/fe3111727664047b741079/m/1/ccb17401-00ab-42c3-b141-7a1b93f23360.png"
+        alt="Cumulus Financial" class="header-logo" />
+      <div class="header-text">
+        <h1>SP Demo Builder</h1>
+        <p>Spin up a live Salesforce Personalization web demo in a connected SDO</p>
+      </div>
+    </div>
+  </header>
+
+  <section class="component-control-bar">
+    <div class="control-bar-content">
+      <div class="control-bar-left" id="navControls"></div>
+      <div class="control-bar-right" id="headerControls"></div>
+    </div>
+  </section>
+
+  <main id="app"><!-- rendered by preview.js below --></main>
+
+  <footer class="app-footer">
+    <p>Built for Salesforce Solution Engineers · Created by Monica Toledo</p>
+  </footer>
+
+  <div id="modalRoot"></div>
+
+  <script src="./ui-preview.js"></script>
+</body>
+</html>

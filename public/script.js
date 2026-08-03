@@ -105,7 +105,9 @@ function renderSignIn() {
         authErr === 'domain_not_allowed'
           ? el('div', { class: 'banner error' }, 'That email domain is not allowed. Use your @salesforce.com account.')
           : null,
-        el('a', { class: 'btn google', href: '/auth/google' }, 'Sign in with Google'),
+        // Carry the current URL (incl. ?config= from the Experience Generator
+        // handoff) through the OAuth round-trip so the prefill survives sign-in.
+        el('a', { class: 'btn google', href: '/auth/google?returnTo=' + encodeURIComponent(location.pathname + location.search) }, 'Sign in with Google'),
       ]),
     ])
   );
@@ -223,20 +225,81 @@ async function loadCatalog() {
 // Holds an uploaded HTML file's contents when the SE brings their own export.
 let _uploadedHtml = null;
 
+// New Demo guided-journey state. The card is BUILT ONCE and cached so every
+// input keeps its identity + typed value across step navigation — steps are
+// shown/hidden, never re-rendered. runDeploy()/the file handler therefore read
+// the exact same live elements as before (deploy contract unchanged).
+let _newDemoCard = null;
+let _newDemoStep = 1;
+let _newDemoSource = null; // 'form' | 'upload'
+let _newDemoReady = null; // null=unknown, true/false from prereq check
+
+// Drop the cached New Demo card so the next render rebuilds a clean journey.
+// Called after a successful deploy and when the connected org changes.
+function resetNewDemo() {
+  _newDemoCard = null;
+  _newDemoStep = 1;
+  _newDemoSource = null;
+  _newDemoReady = null;
+  _uploadedHtml = null;
+}
+
+// Stepper header (1 Ready · 2 Bring experience · 3 Target & deploy).
+function buildStepper(current) {
+  const steps = [['Ready', 1], ['Bring experience', 2], ['Target & deploy', 3]];
+  const wrap = el('div', { class: 'stepper' });
+  steps.forEach(([label, n], i) => {
+    const cls = n < current ? 'done' : n === current ? 'active' : '';
+    wrap.appendChild(el('div', { class: 'step-node ' + cls }, [
+      el('div', { class: 'step-dot' }, n < current ? '✓' : String(n)),
+      el('div', { class: 'step-label' }, label),
+    ]));
+    if (i < steps.length - 1) wrap.appendChild(el('div', { class: 'step-line' }));
+  });
+  return wrap;
+}
+
 function activeConnection() {
   return state.connections.find((c) => c.id === state.activeConnectionId) || state.connections[0];
 }
 
 function renderNewDemo() {
+  // Build once; thereafter just re-show the cached card so inputs keep their
+  // typed values and identities across step navigation.
+  if (_newDemoCard) return _newDemoCard;
+
   const conn = activeConnection();
-  const card = el('div', { class: 'card' }, [el('h2', {}, 'New Demo')]);
+  const card = el('div', { class: 'card' });
+  _newDemoCard = card;
+  card.appendChild(el('h2', {}, 'New Demo'));
+  card.appendChild(el('p', { class: 'step-hint' },
+    'Take an experience you designed and stand up a real Salesforce Personalization setup for it in your SDO — in minutes, not a week.'));
 
   // Prefill from handoff (?config=...) if present.
   let prefill = {};
   const cfg = qs('config');
+  const fromHandoff = !!cfg;
   if (cfg) {
     try { prefill = JSON.parse(decodeURIComponent(cfg)); } catch {}
   }
+  // Arriving from the Experience Generator defaults the source to upload.
+  if (fromHandoff && _newDemoSource === null) _newDemoSource = 'upload';
+
+  // Handoff banner.
+  if (fromHandoff) {
+    card.appendChild(el('div', { class: 'banner info callout-flex' }, [
+      el('div', { class: 'callout-icon' }, '↪'),
+      el('div', {}, [
+        el('div', { html: '<strong>Brought over from the Experience Generator.</strong> Your brand, colors, and use case are pre-filled in Step 2.' }),
+        el('div', { class: 'small', style: 'margin-top:4px' },
+          'In Step 2 you’ll upload the Adaptive Web file you downloaded there, so the live demo shows your exact creative.'),
+      ]),
+    ]));
+  }
+
+  const stepperHost = el('div');
+  card.appendChild(stepperHost);
+  const refreshStepper = () => { stepperHost.innerHTML = ''; stepperHost.appendChild(buildStepper(_newDemoStep)); };
 
   const form = el('div');
   const nameInput = el('input', { type: 'text', id: 'demoName', placeholder: 'e.g. AYCO Warm Homepage v1', value: prefill.demoName || '' });
@@ -268,14 +331,9 @@ function renderNewDemo() {
     placeholder: 'connector id (UUID) or full https://cdn.c360a.salesforce.com/beacon/... URL',
   });
 
-  // Demo name — always used (form OR upload).
-  form.appendChild(el('label', {}, 'Demo name'));
-  form.appendChild(nameInput);
-
-  // Generator-only fields — IGNORED when a file is uploaded, so group them in a
-  // dimmable block with a heading that clarifies the "configure it here" path.
+  // Generator-only fields (form path). Shown when the "Design it here" source is
+  // chosen. Same inputs/IDs as before — just grouped under a source panel.
   const configFields = el('div', { class: 'config-fields' }, [
-    el('div', { class: 'config-fields-head small muted' }, 'Configure the experience'),
     el('label', {}, 'Industry template'), industrySel,
     el('label', {}, 'Use case / vignette'), useCaseSel,
     el('label', {}, 'Brand name'), brandInput,
@@ -284,7 +342,6 @@ function renderNewDemo() {
       el('div', {}, [el('label', {}, 'Accent color'), accentInput]),
     ]),
   ]);
-  form.appendChild(configFields);
 
   _uploadedHtml = null;
   const uploadStatus = el('div', { class: 'small muted', style: 'margin-top:0.75rem' });
@@ -302,7 +359,6 @@ function renderNewDemo() {
   ]);
 
   const setFileMode = (on) => {
-    configFields.classList.toggle('dimmed', on);
     uploadCard.classList.toggle('active', on);
   };
 
@@ -324,25 +380,102 @@ function renderNewDemo() {
     };
     reader.readAsText(file);
   });
-  form.appendChild(uploadCard);
+  // ---- Assemble the three step sections (inputs above are reused as-is). ----
 
-  // Profile Data Graph — always applies (form OR upload), so it lives outside the
-  // dimmable block, below the two source options.
-  form.appendChild(el('label', { style: 'margin-top:1.25rem; display:block' }, 'Profile Data Graph'));
-  form.appendChild(dataGraphInput);
-  form.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
-    'The Data Cloud Profile Data Graph the Personalization Points bind to. Applies whether you configure the form or upload a file.'));
-  form.appendChild(el('label', { style: 'margin-top:1.25rem; display:block' }, 'Website connector (for live WPM)'));
-  form.appendChild(connectorInput);
-  form.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
-    'Makes WPM attach to the page. Paste your Website connector id (UUID) or the whole Web SDK <script src> URL from its install snippet. In Data Cloud Setup → Websites & Mobile Apps → your connector. Leave blank to host the page without a live beacon (WPM won’t attach).'));
+  // STEP 1 — org readiness (populated by runReadinessCheck). Gates step 2.
+  const step1 = el('div', { class: 'step-section' });
+  const readinessHost = el('div');
+  step1.appendChild(el('h3', {}, 'First — is your org ready?'));
+  step1.appendChild(el('p', { class: 'step-hint' },
+    'We check the connected SDO for what a live Personalization demo needs. Fix anything red, then re-check.'));
+  step1.appendChild(readinessHost);
+
+  // STEP 2 — bring your experience (name + source choice: form OR upload).
+  const step2 = el('div', { class: 'step-section hidden' });
+  step2.appendChild(el('h3', {}, 'Bring your experience'));
+  step2.appendChild(el('p', { class: 'step-hint' },
+    'Start from an Adaptive Web file you downloaded in the Experience Generator, or build one here. Pick one — they don’t mix.'));
+  step2.appendChild(el('label', {}, 'Demo name'));
+  step2.appendChild(nameInput);
+
+  const uploadPanel = el('div', { class: 'source-panel' }, [
+    el('div', { class: 'banner warn callout-flex' }, [
+      el('div', { class: 'callout-icon' }, '⬇'),
+      el('div', {}, [
+        el('div', { html: '<strong>Download your Adaptive Web file first.</strong> In the Experience Generator, use <strong>Download</strong> to save the HTML, then upload that file here.' }),
+        el('div', { class: 'small', style: 'margin-top:4px' },
+          'The downloaded file carries your real hero image and copy, so the live demo shows the exact creative you designed.'),
+        el('a', { href: EXPERIENCE_GENERATOR_URL, target: '_blank', class: 'small' }, 'Open the Experience Generator →'),
+      ]),
+    ]),
+    uploadCard,
+  ]);
+  const formPanel = el('div', { class: 'source-panel' }, [configFields]);
+
+  const sourceChoice = el('div', { class: 'source-choice' });
+  const applySource = () => {
+    sourceChoice.querySelectorAll('.source-opt').forEach((o) => o.classList.toggle('selected', o.dataset.src === _newDemoSource));
+    uploadPanel.classList.toggle('hidden', _newDemoSource !== 'upload');
+    formPanel.classList.toggle('hidden', _newDemoSource !== 'form');
+    step2next.disabled = !_newDemoSource;
+  };
+  const sourceOpt = (key, title, desc) => el('div', {
+    class: 'source-opt', 'data-src': key,
+    onclick: () => { _newDemoSource = key; applySource(); },
+  }, [
+    el('div', { class: 'so-title' }, [el('span', { class: 'so-radio' }), title]),
+    el('div', { class: 'so-desc' }, desc),
+  ]);
+  sourceChoice.appendChild(sourceOpt('upload', 'Upload a downloaded file', 'Host the Adaptive Web HTML you exported from the Experience Generator. Recommended — it’s the exact creative your customer sees.'));
+  sourceChoice.appendChild(sourceOpt('form', 'Design it here', 'Pick an industry + use case and set brand colors. Good for a quick generic demo.'));
+  step2.appendChild(sourceChoice);
+  step2.appendChild(uploadPanel);
+  step2.appendChild(formPanel);
+
+  const step2back = el('button', { class: 'btn secondary', onclick: () => goStep(1) }, '← Back');
+  const step2next = el('button', { class: 'btn', onclick: () => goStep(3) }, 'Next: target & deploy →');
+  step2.appendChild(el('div', { class: 'step-actions' }, [step2back, step2next]));
+
+  // STEP 3 — target + deploy (Profile Data Graph, connector, deploy button).
+  const step3 = el('div', { class: 'step-section hidden' });
+  step3.appendChild(el('h3', {}, 'Target & deploy'));
+  step3.appendChild(el('p', { class: 'step-hint' },
+    'These bind your Personalization Points to Data Cloud and wire the live WPM beacon. Pre-filled for this org.'));
+  step3.appendChild(el('label', {}, 'Profile Data Graph'));
+  step3.appendChild(dataGraphInput);
+  step3.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
+    'The Data Cloud Profile Data Graph the Personalization Points bind to. WPM won’t list points bound to a batch/marketing graph.'));
+  step3.appendChild(el('label', { style: 'margin-top:1.25rem; display:block' }, 'Website connector (for live WPM)'));
+  step3.appendChild(connectorInput);
+  step3.appendChild(el('p', { class: 'small muted', style: 'margin-top:0.25rem' },
+    'Makes WPM attach to the page. Paste your Website connector id (UUID) or the whole Web SDK <script src> URL. In Data Cloud Setup → Websites & Mobile Apps → your connector. Leave blank to host without a live beacon (WPM won’t attach).'));
 
   const statusArea = el('div', { id: 'deployStatus', style: 'margin-top:1.25rem' });
   const deployBtn = el('button', { class: 'btn', onclick: () => runDeploy() },
     'Deploy to ' + (conn ? (conn.org_alias || conn.org_id) : 'org'));
-  form.appendChild(el('div', { style: 'margin-top:1.5rem' }, [deployBtn]));
-  form.appendChild(statusArea);
+  step3.appendChild(el('div', { class: 'step-actions' }, [
+    el('button', { class: 'btn secondary', onclick: () => goStep(2) }, '← Back'),
+    deployBtn,
+  ]));
+  step3.appendChild(statusArea);
+
+  form.appendChild(step1);
+  form.appendChild(step2);
+  form.appendChild(step3);
   card.appendChild(form);
+
+  // Step navigation: toggle section visibility (never re-render).
+  const sections = { 1: step1, 2: step2, 3: step3 };
+  function goStep(n) {
+    _newDemoStep = n;
+    Object.entries(sections).forEach(([k, sec]) => sec.classList.toggle('hidden', Number(k) !== n));
+    refreshStepper();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  card._goStep = goStep; // exposed for runDeploy success handling
+
+  refreshStepper();
+  applySource();
 
   // Populate dropdowns.
   loadCatalog().then((cat) => {
@@ -360,37 +493,73 @@ function renderNewDemo() {
     if (prefill.adaptiveWebSubUseCase) useCaseSel.value = prefill.adaptiveWebSubUseCase;
   });
 
-  // Prerequisites check on load.
-  runPrereqCheck(card, conn);
+  // Step 1 readiness check on load; controls the gate into step 2.
+  runReadinessCheck(readinessHost, conn, () => goStep(2));
 
+  goStep(_newDemoStep);
   return card;
 }
 
-async function runPrereqCheck(card, conn) {
-  if (!conn) return;
-  const box = el('div', { class: 'banner info small', html: 'Checking org prerequisites…' });
-  card.insertBefore(box, card.children[1]);
+// Step 1: check org prerequisites, render them as the readiness gate, and
+// enable "Next" only when ready. Same API call + graph-stashing as before.
+async function runReadinessCheck(host, conn, onNext) {
+  host.innerHTML = '';
+  if (!conn) { host.appendChild(el('div', { class: 'banner error small' }, 'No connected org.')); return; }
+  host.appendChild(el('div', { class: 'banner info small' }, 'Checking org prerequisites…'));
+
+  // Fix hints keyed by check, shown when a check fails.
+  const FIX = {
+    profileDataGraph: 'WPM only lists Personalization Points bound to a real-time profile data graph. In Data Cloud Setup → Data Graphs, create a Real-Time graph on your Unified Individual, then re-check.',
+    personalization: 'Personalization may not be fully enabled in this org. Enable Data 360 Personalization, then re-check.',
+    personalizationSchema: 'The app could not confirm schema access. Ensure the Personalization Admin permission set is assigned, then re-check.',
+  };
+
   try {
     const pre = await api('GET', `/api/sf/${conn.id}/prerequisites`);
-    const line = (label, chk) => {
-      const ok = chk && chk.ok;
-      const cls = ok === true ? 'ok' : ok === false ? 'err' : 'unknown';
-      return el('li', {}, [el('span', { class: 'status-dot ' + cls }), label + (chk && chk.detail ? ' — ' + chk.detail : '')]);
-    };
     // Stash discovered Profile Data Graphs so deploy can bind PPs to one.
     const pdg = pre.checks.profileDataGraph || {};
     state.profileDataGraphs = Array.isArray(pdg.graphs) ? pdg.graphs : [];
-    box.className = 'card';
-    box.innerHTML = '';
-    box.appendChild(el('strong', {}, pre.ready ? 'Prerequisites OK' : 'Prerequisites incomplete'));
-    box.appendChild(el('ul', { class: 'check-list small' }, [
-      line('Personalization', pre.checks.personalization),
-      line('Personalization Schema', pre.checks.personalizationSchema),
-      line('Profile Data Graph', pre.checks.profileDataGraph),
+
+    const row = (key, title, chk) => {
+      const ok = !!(chk && chk.ok);
+      return el('li', {}, [
+        el('div', { class: 'rd-icon ' + (ok ? 'ok' : 'err') }, ok ? '✓' : '!'),
+        el('div', { class: 'rd-body' }, [
+          el('div', { class: 'rd-title' }, title),
+          chk && chk.detail ? el('div', { class: 'rd-detail' }, chk.detail) : null,
+          !ok && FIX[key] ? el('div', { class: 'rd-fix' }, FIX[key]) : null,
+        ]),
+      ]);
+    };
+
+    host.innerHTML = '';
+    host.appendChild(el('ul', { class: 'readiness-list' }, [
+      row('personalization', 'Personalization enabled', pre.checks.personalization),
+      row('personalizationSchema', 'Personalization schema access', pre.checks.personalizationSchema),
+      row('profileDataGraph', 'Real-time Profile Data Graph', pre.checks.profileDataGraph),
+    ]));
+
+    const ready = !!pre.ready;
+    _newDemoReady = ready;
+    host.appendChild(el('div', { class: 'rd-summary ' + (ready ? 'ready' : 'notready') }, [
+      el('div', { class: 'rd-icon ' + (ready ? 'ok' : 'err') }, ready ? '✓' : '!'),
+      el('div', {}, ready
+        ? 'Your org is ready. On to bringing your experience in.'
+        : 'A couple of things are missing. Fix them above, then re-check — this saves you from a dead-end deploy.'),
+    ]));
+
+    host.appendChild(el('div', { class: 'step-actions' }, [
+      el('button', { class: 'btn secondary', onclick: () => runReadinessCheck(host, conn, onNext) }, 'Re-check org'),
+      el('button', { class: 'btn', disabled: ready ? null : 'true', onclick: () => { if (_newDemoReady) onNext(); } },
+        'Next: bring your experience →'),
     ]));
   } catch (e) {
-    box.className = 'banner error small';
-    box.textContent = 'Prerequisite check failed: ' + e.message;
+    host.innerHTML = '';
+    host.appendChild(el('div', { class: 'banner error small' }, 'Prerequisite check failed: ' + e.message));
+    host.appendChild(el('div', { class: 'step-actions' }, [
+      el('button', { class: 'btn secondary', onclick: () => runReadinessCheck(host, conn, onNext) }, 'Re-check org'),
+      el('span', {}),
+    ]));
   }
 }
 
@@ -453,6 +622,9 @@ async function runDeploy() {
     });
     steps.forEach((_, i) => setStep(i, 'done'));
     statusArea.appendChild(renderPostDeploy(result, conn));
+    // Result + guide are now on screen. Drop the cached journey so navigating
+    // back to New Demo starts a clean one (this card stays until they leave).
+    resetNewDemo();
   } catch (e) {
     setStep(0, 'error');
     statusArea.appendChild(el('div', { class: 'banner error' }, 'Deploy failed: ' + e.message));
@@ -520,7 +692,40 @@ function renderPostDeploy(result, conn) {
     beaconLive
       ? 'Web SDK beacon is live. Click “Open in WPM” to author experiences on the hosted page.'
       : 'Beacon could not be wired (tenant endpoint not found) — the page renders but WPM will not attach. Re-check org prerequisites, then redeploy.'));
+
+  box.appendChild(buildWpmGuide());
   return box;
+}
+
+// The "now make it real in WPM" guide — the value payoff. Static instructional
+// content (verified WPM/Data Cloud facts); safe to show after every success.
+function buildWpmGuide() {
+  const guide = el('div', { class: 'card', style: 'margin-top:1rem' });
+  guide.appendChild(el('h3', {}, 'Make it real in WPM — do this once'));
+  guide.appendChild(el('p', { class: 'step-hint' },
+    'Follow these in order. Skip step 1 and your Personalization Points won’t show up in WPM — the #1 gotcha.'));
+  const steps = [
+    { n: '1', tip: false, title: 'Upload the sitemap to your connector',
+      html: 'Click <strong>Download Sitemap</strong> above, then in <code>Setup → Data Cloud → Websites &amp; Mobile Apps → your connector → Replace Sitemap</code>, upload it. This registers this page’s content zones so WPM knows where your points live. One-time per demo page.' },
+    { n: '2', tip: false, title: 'Open the page in WPM',
+      html: 'Click <strong>Open in WPM</strong>. Sign into Salesforce when prompted — the Web Personalization Manager overlays the live page.' },
+    { n: '3', tip: false, title: 'Why your points appear (the unlock)',
+      html: 'WPM’s picker only lists Personalization Points bound to a <strong>real-time profile data graph</strong>. Yours are (Step 1 checked for it). If the picker is ever empty, that binding is the first thing to check.' },
+    { n: '★', tip: true, title: 'Add & edit Personalization Decisions',
+      html: 'The decisions we created are <strong>always-on</strong> (the API can’t set targeting rules). In WPM, open a Personalization Point and add more <strong>Decisions</strong> with audience criteria — one hero for mortgage intent, one for auto, etc. The target look is one Point with several Decisions in a dropdown, swapping the creative live.' },
+    { n: '★', tip: true, title: 'Rename & customize',
+      html: 'Rename Points, Decisions, and the Experience Template in WPM to match your customer’s brand. Edit the hero copy, image, and CTA right in the decision — the swap updates on the hosted page.' },
+  ];
+  steps.forEach((s) => {
+    guide.appendChild(el('div', { class: 'guide-step' }, [
+      el('div', { class: 'guide-num' + (s.tip ? ' tip' : '') }, s.n),
+      el('div', { class: 'guide-body' }, [
+        el('div', { class: 'gb-title' }, [s.title, s.tip ? el('span', { class: 'pill-note' }, 'tip') : null]),
+        el('div', { class: 'gb-text', html: s.html }),
+      ]),
+    ]));
+  });
+  return guide;
 }
 
 // --- Manage Demos ---
@@ -629,6 +834,7 @@ async function disconnectOrg(id) {
   try { await api('DELETE', '/api/sf/connections/' + id); } catch (e) { alert(e.message); }
   state.connections = await api('GET', '/api/sf/connections');
   state.activeConnectionId = state.connections[0] && state.connections[0].id;
+  resetNewDemo(); // org changed — rebuild the journey against the new org
   renderApp();
 }
 
