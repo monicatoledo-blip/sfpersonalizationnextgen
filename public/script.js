@@ -769,8 +769,8 @@ function buildWpmGuide() {
   guide.appendChild(el('p', { class: 'step-hint' },
     'Follow these in order. Skip step 1 and your Personalization Points won’t show up in WPM — the #1 gotcha.'));
   const steps = [
-    { n: '1', tip: false, title: 'Upload the sitemap to your connector (first time only)',
-      html: 'Click <strong>Download Sitemap</strong> above, then in <code>Setup → Data Cloud → Websites &amp; Mobile Apps → your connector → Replace Sitemap</code>, upload it. This registers the content zones WPM reads. <strong>Once per connector</strong> — the sitemap is the same for every demo, so future demos on this SDO skip this step. Only a net-new SDO/connector needs it again.' },
+    { n: '1', tip: false, title: 'Upload the sitemap to your connector',
+      html: 'Click <strong>Download Sitemap</strong> above, then in <code>Setup → Data Cloud → Websites &amp; Mobile Apps → your connector → Replace Sitemap</code>, upload it. This registers the content zones WPM reads (Homepage Hero + Market Insights). <strong>Once per connector</strong> — the sitemap is the same for every demo, so future demos on this SDO skip it. Re-upload only for a net-new SDO/connector, or after a SP Demo Builder update that changes the content zones.' },
     { n: '2', tip: false, title: 'Open the page in WPM',
       html: 'Click <strong>Open in WPM</strong>. Sign into Salesforce when prompted — the Web Personalization Manager overlays the live page.' },
     { n: '3', tip: false, title: 'Why your points appear (the unlock)',

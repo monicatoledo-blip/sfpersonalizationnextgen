@@ -3,40 +3,22 @@
 // Injects the Data Cloud Web SDK <script> and a sitemap content-zone init into
 // the <head> of the rendered adaptive-web HTML.
 //
-// Content zones — every stable, personalizable surface of the adaptive-web sim,
-// derived from the generator's [[TOKEN]] map + the template's stable ids/classes.
-// A content zone = a stable DOM element WPM can target/replace. Only anchors with
-// a reliable id/class are included (position-only surfaces are intentionally
-// omitted so WPM never binds to a moving target).
-//
-// The three the deployer creates PPs for today:
-//   homepage_hero     -> #warm-homepage-section
-//   recommended_cards -> .floating-cards-container
-//   category_hero     -> #cat-hero
-// The rest are advertised in the sitemap so an SE can bind additional experiences
-// in WPM without editing the page.
-// `name` is the human-readable label WPM shows in its Content Zone dropdown
-// (mirrors Viral's "Hero Banner"/"Recommendations"). `selector` is the stable
-// DOM anchor. `key` is the snake_case id the deployer's PPs bind to.
+// Content zones — the personalizable surfaces of the adaptive-web page, each a
+// stable DOM anchor WPM can target/replace. This list must match the two
+// experiences the deployer builds PPs for (sf/deploy.js PP_DEFS) and the real
+// ids in the template. `name` is the label WPM shows in its Content Zone
+// dropdown; `selector` is the stable DOM anchor; `key` is the snake_case id.
+// The two experiences the deployer actually builds PPs for (must match
+// sf/deploy.js PP_DEFS and the real DOM anchors on the adaptive-web page):
+//   homepage_hero  -> #warm-homepage-section  (the returning-visitor hero)
+//   market_insights -> #warm-insights-grid     (the 3 "Market Insights" cards)
+// Both live inside the warm (personalized) homepage. Earlier phantom zones
+// (#cat-hero, .floating-cards-container, #home-flow-sections, category/landing
+// surfaces) were removed — they aren't present on this page, so WPM would bind
+// to nothing. Re-add a zone here ONLY when a real, stable DOM anchor exists.
 const CONTENT_ZONES = [
-  // Homepage — cold (first-visit) and warm (returning) hero states.
-  { key: 'cold_homepage_hero', name: 'Cold Homepage Hero', selector: '#cold-hero-section' },
   { key: 'homepage_hero', name: 'Homepage Hero', selector: '#warm-homepage-section' },
-  { key: 'home_flow', name: 'Homepage Flow', selector: '#home-flow-sections' },
-  // Recommendations grid (adaptive overlay).
-  { key: 'recommended_cards', name: 'Recommended Cards', selector: '.floating-cards-container' },
-  // Category page surfaces.
-  { key: 'category_page', name: 'Category Page', selector: '#categoryPageContainer' },
-  { key: 'category_hero', name: 'Category Hero', selector: '#cat-hero' },
-  { key: 'category_core_services', name: 'Category Core Services', selector: '#cat-core-services' },
-  { key: 'category_why_us', name: 'Category Why Us', selector: '#cat-why-us' },
-  { key: 'category_insights', name: 'Category Insights', selector: '#cat-insights' },
-  // Landing page + lead-capture form.
-  { key: 'landing_page', name: 'Landing Page', selector: '#landingPageContainer' },
-  { key: 'contact_form', name: 'Contact Form', selector: '#contactForm' },
-  // Global chrome.
-  { key: 'nav_logo', name: 'Nav Logo', selector: '#navHomeLogoLink' },
-  { key: 'chat_widget', name: 'Chat Widget', selector: '#chatWidget' },
+  { key: 'market_insights', name: 'Market Insights', selector: '#warm-insights-grid' },
 ];
 
 // Build the live Data Cloud Web SDK beacon URL.

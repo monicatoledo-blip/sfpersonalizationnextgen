@@ -68,4 +68,47 @@ function extractHeroContent(html) {
   return { image, header, subheader: realSub, eyebrow, cta };
 }
 
-module.exports = { extractHeroContent };
+// extractInsightCards(html) -> [{ image, category, title, body }, ...] | null
+// Pulls the WARM "Market Insights" cards (#warm-insights-grid) so the deployer
+// can put the real personalized cards into the Market Insights decision. Each
+// card is an <article class="home-insight-card"> with: an <img>, an eyebrow
+// <div> (category), an <h3> (title), and a <p> (body). Regex-based, tolerant of
+// attribute order. Returns up to 3 cards; null if the grid isn't found.
+function extractInsightCards(html) {
+  if (!html || typeof html !== 'string') return null;
+  // Scope to the warm cards grid; take a generous window covering 3 cards.
+  const gridRe = /id=["']warm-insights-grid["'][^>]*>/i;
+  const gm = gridRe.exec(html);
+  let scope;
+  if (gm) {
+    const start = gm.index + gm[0].length;
+    scope = html.slice(start, start + 12000);
+  } else {
+    // Fallback: within the warm homepage section, after the "Market Insights"
+    // heading (covers files generated before the grid id was added).
+    const warm = sliceById(html, 'warm-homepage-section');
+    if (!warm) return null;
+    const mi = warm.search(/Market Insights/i);
+    scope = mi >= 0 ? warm.slice(mi, mi + 12000) : warm;
+  }
+
+  // Split into <article ...>...</article> blocks (the cards).
+  const cards = [];
+  const artRe = /<article\b[^>]*>([\s\S]*?)<\/article>/gi;
+  let am;
+  while ((am = artRe.exec(scope)) && cards.length < 3) {
+    const block = am[1];
+    const image = firstMatch(/<img[^>]*\bsrc=["']([^"']+)["']/i, block).trim();
+    // The eyebrow/category is the small uppercase <div> in the card body — NOT
+    // the first <div> (that's the image wrapper). Match the div sitting just
+    // before the <h3> title; fall back to the "uppercase" utility class.
+    let category = textOnly(firstMatch(/<div[^>]*>([^<]*?)<\/div>\s*<h3\b/i, block));
+    if (!category) category = textOnly(firstMatch(/<div[^>]*\buppercase\b[^>]*>([\s\S]*?)<\/div>/i, block));
+    const title = textOnly(firstMatch(/<h3[^>]*>([\s\S]*?)<\/h3>/i, block));
+    const body = textOnly(firstMatch(/<p[^>]*>([\s\S]*?)<\/p>/i, block));
+    if (image || title || body) cards.push({ image, category, title, body });
+  }
+  return cards.length ? cards : null;
+}
+
+module.exports = { extractHeroContent, extractInsightCards };

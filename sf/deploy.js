@@ -5,21 +5,20 @@
 //
 // Per demo we create a fully self-consistent, demo-prefixed set so many demos
 // coexist and per-demo teardown can delete exactly what it made:
-//   - 3 Content Schemas  (Hero Banner / Content Card / Category Hero)
-//   - 1 WebApp Handlebars Transformer for the hero (renders the image swap)
-//   - 3 Personalization Points, each bound to its schema + content zone
-//   - Personalization Decisions nested in each PP; the homepage-hero PP's
-//     decision carries the personalized hero image + copy from the simulator
-//     config, so the vanilla->personalized swap is a one-click in WPM.
+//   - 2 Content Schemas  (Hero Banner / Market Insights)
+//   - 2 WebApp Handlebars Transformers (hero + market-insights grid)
+//   - 2 Personalization Points, each bound to its schema + content zone
+//   - Personalization Decisions nested in each PP, carrying the REAL warm
+//     content extracted from the uploaded HTML (hero image+copy; the 3 cards'
+//     images+copy) so the vanilla->personalized swap shows the true creative.
 //
-// The three surfaces (must match html/inject-sdk.js content zones and template):
-//   "Web - Homepage Hero"     -> zone homepage_hero     -> #warm-homepage-section
-//   "Web - Recommended Cards" -> zone recommended_cards -> .floating-cards-container
-//   "Web - Category Hero"     -> zone category_hero     -> #cat-hero
+// The two experiences (must match html/inject-sdk.js content zones and template):
+//   "Web - Homepage Hero"     -> zone homepage_hero   -> #warm-homepage-section
+//   "Web - Market Insights"   -> zone market_insights -> #warm-insights-grid
 
 const p13n = require('./p13n');
 const { getMergedAdaptiveStory } = require('../data/generator');
-const { extractHeroContent } = require('../html/extract');
+const { extractHeroContent, extractInsightCards } = require('../html/extract');
 const { uploadHeroImage } = require('../html/cloudinary');
 
 const DEFAULT_DATA_SPACE = 'default';
@@ -34,34 +33,31 @@ const HERO_ATTRS = [
   { name: 'CallToActionText', label: 'CTA Text' },
 ];
 
+// Market Insights is ONE experience rendering all three cards, so its schema
+// carries 3 cards x {Image, Category, Title, Body}. One decision swaps the whole
+// grid (cold -> warm) at once — matches the page + the "one PP, many decisions"
+// WPM pattern.
+const CARD_COUNT = 3;
+const INSIGHTS_ATTRS = [];
+for (let i = 1; i <= CARD_COUNT; i += 1) {
+  INSIGHTS_ATTRS.push({ name: `Card${i}Image`, label: `Card ${i} Image` });
+  INSIGHTS_ATTRS.push({ name: `Card${i}Category`, label: `Card ${i} Category` });
+  INSIGHTS_ATTRS.push({ name: `Card${i}Title`, label: `Card ${i} Title` });
+  INSIGHTS_ATTRS.push({ name: `Card${i}Body`, label: `Card ${i} Body` });
+}
+
 const SCHEMA_DEFS = [
   { key: 'heroBanner', label: 'Web - Hero Banner', attributes: HERO_ATTRS },
-  {
-    key: 'contentCard',
-    label: 'Web - Content Card',
-    attributes: [
-      { name: 'Title', label: 'Title' },
-      { name: 'Description', label: 'Description' },
-      { name: 'Thumbnail', label: 'Thumbnail' },
-      { name: 'CallToActionText', label: 'CTA Text' },
-    ],
-  },
-  {
-    key: 'categoryHero',
-    label: 'Web - Category Hero',
-    attributes: [
-      { name: 'Header', label: 'Header' },
-      { name: 'BackgroundImageUrl', label: 'Background Image URL' },
-      { name: 'BadgeText', label: 'Badge Text' },
-    ],
-  },
+  { key: 'marketInsights', label: 'Web - Market Insights', attributes: INSIGHTS_ATTRS },
 ];
 
-// Personalization Points, each bound to a Content Schema + content zone.
+// The two real experiences on the adaptive-web page. Each PP binds to a Content
+// Schema + a real content zone (see html/inject-sdk.js CONTENT_ZONES):
+//   homepage_hero   -> #warm-homepage-section
+//   market_insights -> #warm-insights-grid
 const PP_DEFS = [
   { key: 'homepageHero', label: 'Web - Homepage Hero', schemaKey: 'heroBanner', zone: 'homepage_hero' },
-  { key: 'recommendedCards', label: 'Web - Recommended Cards', schemaKey: 'contentCard', zone: 'recommended_cards' },
-  { key: 'categoryHero', label: 'Web - Category Hero', schemaKey: 'categoryHero', zone: 'category_hero' },
+  { key: 'marketInsights', label: 'Web - Market Insights', schemaKey: 'marketInsights', zone: 'market_insights' },
 ];
 
 function prefixed(demoName, label) {
@@ -92,9 +88,11 @@ function heroTransformerHtml() {
   ].join('\n');
 }
 
-function heroSubstitutionDefinitions() {
+// SchemaPath substitution definitions for an arbitrary attribute list — each
+// subVar maps 1:1 to a schema attribute via [attributes].[<name>].
+function substitutionDefinitionsFor(attrs) {
   const defs = {};
-  for (const a of HERO_ATTRS) {
+  for (const a of attrs) {
     defs[a.name] = {
       configType: 'SchemaPath',
       defaultValue: `[attributes].[${a.name}]`,
@@ -104,6 +102,45 @@ function heroSubstitutionDefinitions() {
     };
   }
   return defs;
+}
+
+function heroSubstitutionDefinitions() {
+  return substitutionDefinitionsFor(HERO_ATTRS);
+}
+
+// Market Insights transformer — renders the 3-card grid from one decision.
+// Mirrors the page's .home-insight-card markup (image + eyebrow/category +
+// title + body) so the WPM swap looks native. subVars map to the schema's
+// Card{n}{Image,Category,Title,Body} attributes.
+function insightsTransformerHtml() {
+  const card = (i) => [
+    '  <article class="sfdcep-insight-card">',
+    `    <div class="sfdcep-insight-img"><img src="{{subVar 'Card${i}Image'}}" alt="" /></div>`,
+    '    <div class="sfdcep-insight-body">',
+    `      <div class="sfdcep-insight-eyebrow">{{subVar 'Card${i}Category'}}</div>`,
+    `      <h3 class="sfdcep-insight-title">{{subVar 'Card${i}Title'}}</h3>`,
+    `      <p class="sfdcep-insight-text">{{subVar 'Card${i}Body'}}</p>`,
+    '    </div>',
+    '  </article>',
+  ].join('\n');
+  return [
+    '<style>',
+    '.sfdcep-insights{display:grid;gap:2rem;grid-template-columns:repeat(3,1fr);font-family:Arial,Helvetica,sans-serif;}',
+    '@media (max-width:768px){.sfdcep-insights{grid-template-columns:1fr;}}',
+    '.sfdcep-insight-card{display:flex;flex-direction:column;overflow:hidden;border:1px solid #e2e8f0;border-radius:1rem;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06);}',
+    '.sfdcep-insight-img{aspect-ratio:16/10;overflow:hidden;background:#f1f5f9;}',
+    '.sfdcep-insight-img img{width:100%;height:100%;object-fit:cover;}',
+    '.sfdcep-insight-body{padding:1.5rem;}',
+    '.sfdcep-insight-eyebrow{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#008b7d;margin-bottom:.5rem;}',
+    '.sfdcep-insight-title{font-size:18px;font-weight:600;color:#0f172a;margin:0;}',
+    '.sfdcep-insight-text{font-size:14px;line-height:1.6;color:#475569;margin-top:.75rem;}',
+    '</style>',
+    '<div class="sfdcep-insights">',
+    card(1),
+    card(2),
+    card(3),
+    '</div>',
+  ].join('\n');
 }
 
 // Build the personalized-hero attribute values. Prefer content EXTRACTED from
@@ -170,8 +207,35 @@ async function heroDecisionAttributeValues(demoName, formData, uploadedHtml) {
   return values.filter((v) => v.value);
 }
 
-// Decisions per PP. Homepage hero gets the personalized content; the other two
-// get a single fallback decision so WPM has something to bind. Async (image host).
+// Build the Market Insights decision values from the uploaded HTML's warm cards.
+// Each card's thumbnail is hosted on Cloudinary (like the hero) so the decision
+// carries a real URL, not a base64 blob — this is the personalized-thumbnail
+// path. Returns Card{n}{Image,Category,Title,Body} attribute values.
+async function insightsDecisionAttributeValues(demoName, uploadedHtml) {
+  const cards = (uploadedHtml && extractInsightCards(uploadedHtml)) || [];
+  const values = [];
+  for (let i = 0; i < CARD_COUNT; i += 1) {
+    const c = cards[i] || {};
+    let image = String(c.image || '').trim();
+    if (image) {
+      const hosted = await uploadHeroImage(image, {
+        publicId: `sp-demo/${apiName(demoName)}-insight-${i + 1}`,
+      });
+      image = hosted || (/^https?:\/\//i.test(image) ? image : '');
+    }
+    const n = i + 1;
+    if (image) values.push({ attributeName: `Card${n}Image`, value: image });
+    if (c.category) values.push({ attributeName: `Card${n}Category`, value: String(c.category).trim() });
+    if (c.title) values.push({ attributeName: `Card${n}Title`, value: String(c.title).trim() });
+    if (c.body) values.push({ attributeName: `Card${n}Body`, value: String(c.body).trim() });
+  }
+  return values;
+}
+
+// Decisions per PP. Both experiences get a personalized decision built from the
+// uploaded HTML's warm content, so the WPM swap shows the real creative. Async
+// (image hosting). A demo with no uploaded HTML yields empty-value decisions
+// that WPM can still bind + author.
 async function decisionsFor(ppKey, demoName, formData, uploadedHtml) {
   if (ppKey === 'homepageHero') {
     return [
@@ -179,6 +243,16 @@ async function decisionsFor(ppKey, demoName, formData, uploadedHtml) {
         name: apiName(prefixed(demoName, 'Personalized Hero')),
         label: 'Personalized Hero',
         attributeValues: await heroDecisionAttributeValues(demoName, formData, uploadedHtml),
+        state: 'Live',
+      },
+    ];
+  }
+  if (ppKey === 'marketInsights') {
+    return [
+      {
+        name: apiName(prefixed(demoName, 'Personalized Insights')),
+        label: 'Personalized Insights',
+        attributeValues: await insightsDecisionAttributeValues(demoName, uploadedHtml),
         state: 'Live',
       },
     ];
@@ -224,17 +298,33 @@ async function deploy(conn, opts) {
       artifacts.schemas.push({ key: def.key, name, id: created.id });
     }
 
-    // 2. Hero transformer (bound to the hero schema).
-    const heroTransformerName = apiName(prefixed(demoName, 'Web - Hero Experience Template'));
-    const t = await p13n.createTransformer(conn, {
-      name: heroTransformerName,
-      label: prefixed(demoName, 'Web - Hero Experience Template'),
-      dataSpace: dataSpaceName,
-      schemaReference: schemaNameByKey.heroBanner,
-      substitutionDefinitions: heroSubstitutionDefinitions(),
-      html: heroTransformerHtml(),
-    });
-    artifacts.transformers.push({ name: heroTransformerName, id: t.id, schemaKey: 'heroBanner' });
+    // 2. Transformers — one per experience, each bound to its schema.
+    const TRANSFORMER_DEFS = [
+      {
+        schemaKey: 'heroBanner',
+        label: 'Web - Hero Experience Template',
+        substitutionDefinitions: heroSubstitutionDefinitions(),
+        html: heroTransformerHtml(),
+      },
+      {
+        schemaKey: 'marketInsights',
+        label: 'Web - Market Insights Template',
+        substitutionDefinitions: substitutionDefinitionsFor(INSIGHTS_ATTRS),
+        html: insightsTransformerHtml(),
+      },
+    ];
+    for (const def of TRANSFORMER_DEFS) {
+      const name = apiName(prefixed(demoName, def.label));
+      const t = await p13n.createTransformer(conn, {
+        name,
+        label: prefixed(demoName, def.label),
+        dataSpace: dataSpaceName,
+        schemaReference: schemaNameByKey[def.schemaKey],
+        substitutionDefinitions: def.substitutionDefinitions,
+        html: def.html,
+      });
+      artifacts.transformers.push({ name, id: t.id, schemaKey: def.schemaKey });
+    }
 
     // 3. Personalization Points (+ nested decisions).
     for (const def of PP_DEFS) {
