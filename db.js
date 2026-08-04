@@ -260,6 +260,44 @@ async function markDeploymentDeleted(userId, id) {
   return updateDeployment(userId, id, { status: 'deleted' });
 }
 
+// --- background delete progress ---
+// Delete runs async (the DEPENDENCY_EXISTS index lag can take minutes), so we
+// persist progress in sf_artifacts._delete and let the UI poll for it. Shape:
+//   { state:'running'|'complete'|'incomplete', startedAt, updatedAt,
+//     total, removed:[{type,ref}], pending:[{type,ref}], orphans:[{type,ref,reason}],
+//     message }
+// Merges into the existing sf_artifacts JSONB so schemas/pps/transformers stay.
+async function setDeleteProgress(id, progress) {
+  const { rows } = await pool.query(
+    `UPDATE deployments
+        SET sf_artifacts = jsonb_set(
+              COALESCE(sf_artifacts, '{}'::jsonb), '{_delete}', $2::jsonb, true
+            ),
+            updated_at = NOW()
+      WHERE id = $1
+      RETURNING id`,
+    [id, JSON.stringify(progress)]
+  );
+  return rows[0] || null;
+}
+
+// Set the top-level status column (active | deleting | deleted) without needing
+// a user scope — used by the async delete runner. Returns the row.
+async function setDeploymentStatus(id, status) {
+  const { rows } = await pool.query(
+    `UPDATE deployments SET status = $2, updated_at = NOW() WHERE id = $1 RETURNING *`,
+    [id, status]
+  );
+  return rows[0] || null;
+}
+
+// Fetch a deployment by id alone (no user scope) — for the async runner, which
+// has no request user. The HTTP layer still scopes reads/writes by user.
+async function getDeploymentById(id) {
+  const { rows } = await pool.query('SELECT * FROM deployments WHERE id = $1', [id]);
+  return rows[0] || null;
+}
+
 // Rows whose expiry has passed and are still active (used by the cleanup worker).
 async function listExpiredDeployments() {
   const { rows } = await pool.query(
@@ -287,5 +325,8 @@ module.exports = {
   getActiveDeploymentForServe,
   updateDeployment,
   markDeploymentDeleted,
+  setDeleteProgress,
+  setDeploymentStatus,
+  getDeploymentById,
   listExpiredDeployments,
 };

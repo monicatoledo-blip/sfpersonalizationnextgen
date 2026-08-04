@@ -249,6 +249,11 @@ table.demos th {
 .badge.active { background: #e3f6e9; color: #2e844a; }
 .badge.error { background: #fdeaea; color: #ba0517; }
 .badge.deleted { background: #eef0f3; color: #6b7280; }
+.badge.deleting { background: #eaf4fc; color: #17618e; }
+
+/* Live delete progress bar (Manage Demos). */
+.progress-track { height: 8px; background: #e6ebf0; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #2a94d6, #47b4ea); border-radius: 999px; transition: width .4s ease; }
 
 /* --- Modal --- */
 .modal-backdrop {

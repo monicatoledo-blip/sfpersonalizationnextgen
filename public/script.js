@@ -793,12 +793,19 @@ function buildWpmGuide() {
 }
 
 // --- Manage Demos ---
+let _managePollTimer = null;
+
 function renderManageDemos() {
   const card = el('div', { class: 'card' }, [el('h2', {}, 'Manage Demos')]);
+  card.appendChild(el('p', { class: 'step-hint' },
+    'Delete runs in the background so it never times out — watch it progress and see exactly what (if anything) needs manual cleanup.'));
   const body = el('div', {}, el('p', { class: 'muted' }, 'Loading…'));
   card.appendChild(body);
 
-  api('GET', '/api/deployments').then((rows) => {
+  // Clear any prior poll loop when re-rendering the screen.
+  if (_managePollTimer) { clearInterval(_managePollTimer); _managePollTimer = null; }
+
+  const paint = (rows) => {
     state.deployments = rows;
     body.innerHTML = '';
     if (!rows.length) {
@@ -810,25 +817,78 @@ function renderManageDemos() {
       el('th', {}, 'Name'), el('th', {}, 'Org'), el('th', {}, 'Status'),
       el('th', {}, 'Created'), el('th', {}, 'Actions'),
     ])));
+    const tbody = el('tbody');
     rows.forEach((r) => {
-      table.appendChild(el('tr', {}, [
+      const deleting = r.status === 'deleting';
+      tbody.appendChild(el('tr', {}, [
         el('td', {}, r.name),
         el('td', {}, r.orgAlias || r.orgId || ''),
-        el('td', {}, el('span', { class: 'badge ' + r.status }, r.status)),
+        el('td', {}, el('span', { class: 'badge ' + r.status }, deleting ? 'deleting' : r.status)),
         el('td', {}, new Date(r.createdAt).toLocaleString()),
         el('td', {}, el('div', { style: 'display:flex;gap:0.4rem' }, [
           el('a', { class: 'btn secondary small', href: r.hostedUrl, target: '_blank' }, 'Open'),
-          el('button', { class: 'btn danger small', onclick: () => confirmDelete(r) }, 'Delete'),
+          el('button', {
+            class: 'btn danger small', disabled: deleting ? 'true' : null,
+            onclick: () => confirmDelete(r),
+          }, deleting ? 'Deleting…' : 'Delete'),
         ])),
       ]));
+      // Progress row: show while deleting, or when the last attempt left orphans.
+      const prog = r.deleteProgress;
+      if (deleting || (prog && prog.state === 'incomplete')) {
+        tbody.appendChild(el('tr', {}, [
+          el('td', { colspan: '5', style: 'background:#f8fafc' }, renderDeleteProgress(r, prog)),
+        ]));
+      }
     });
+    table.appendChild(tbody);
     body.appendChild(table);
-  }).catch((e) => {
-    body.innerHTML = '';
-    body.appendChild(el('div', { class: 'banner error' }, 'Failed to load demos: ' + e.message));
-  });
+  };
 
+  const load = () =>
+    api('GET', '/api/deployments').then((rows) => {
+      paint(rows);
+      // Keep polling while any row is still deleting; stop when none are.
+      const anyDeleting = rows.some((r) => r.status === 'deleting');
+      if (anyDeleting && !_managePollTimer) {
+        _managePollTimer = setInterval(load, 3000);
+      } else if (!anyDeleting && _managePollTimer) {
+        clearInterval(_managePollTimer); _managePollTimer = null;
+      }
+    }).catch((e) => {
+      body.innerHTML = '';
+      body.appendChild(el('div', { class: 'banner error' }, 'Failed to load demos: ' + e.message));
+    });
+
+  load();
   return card;
+}
+
+// Live delete progress: a bar + the current message, and (when finished with
+// leftovers) the honest "verify manually" report + a Retry button.
+function renderDeleteProgress(row, prog) {
+  const wrap = el('div', { style: 'padding:4px 2px' });
+  if (!prog) {
+    wrap.appendChild(el('div', { class: 'small muted' }, 'Starting delete…'));
+    return wrap;
+  }
+  const total = prog.total || 0;
+  const done = (prog.removed || []).length + (prog.orphans || []).length;
+  const pct = total ? Math.round((done / total) * 100) : (prog.state === 'complete' ? 100 : 10);
+
+  wrap.appendChild(el('div', { class: 'small', style: 'font-weight:600;color:#17618e' }, prog.message || 'Removing objects…'));
+  const track = el('div', { class: 'progress-track' }, el('div', { class: 'progress-fill', style: 'width:' + pct + '%' }));
+  wrap.appendChild(track);
+
+  if (prog.state === 'incomplete' && (prog.orphans || []).length) {
+    wrap.appendChild(el('div', { class: 'banner warn small', style: 'margin-top:10px' },
+      (prog.orphans.length) + ' object(s) could not be removed and were left in the org. Verify/remove manually in Salesforce: ' +
+      prog.orphans.map((o) => `${o.type} ${o.ref}`).join(', ')));
+    wrap.appendChild(el('div', { style: 'margin-top:8px' }, [
+      el('button', { class: 'btn danger small', onclick: () => doDelete(row.id) }, 'Retry delete'),
+    ]));
+  }
+  return wrap;
 }
 
 // Delete confirmation modal — lists the exact SF object identifiers that will be
@@ -855,19 +915,18 @@ function confirmDelete(row) {
   modalRoot.appendChild(el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target.className === 'modal-backdrop') close(); } }, modal));
 }
 
+// Kick off the async delete (202) and let Manage Demos poll for progress. The
+// schema dependency-index lag means teardown can take minutes; the background
+// runner handles the retries and the row shows a live progress bar.
 async function doDelete(id, close) {
   try {
     await api('DELETE', '/api/deployments/' + id);
   } catch (e) {
-    // 207 = cleanup incomplete: some org objects remain and the demo was kept
-    // so you can retry. Show exactly what's left.
-    if (e.status === 207 || (e.data && e.data.error === 'cleanup_incomplete')) {
-      alert('Delete incomplete — the demo was kept so you can retry.\n\n' + (e.message || 'Some objects could not be removed from the org.'));
-    } else {
-      alert('Delete failed: ' + e.message);
-    }
+    alert('Could not start delete: ' + e.message);
   }
-  close();
+  if (typeof close === 'function') close();
+  // Re-render Manage Demos so the row flips to "deleting" and polling starts.
+  state.route = 'manageDemos';
   renderApp();
 }
 

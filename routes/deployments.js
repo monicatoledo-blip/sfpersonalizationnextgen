@@ -15,6 +15,7 @@ const build = require('../html/build');
 const { injectSdk, buildConnectorSitemap } = require('../html/inject-sdk');
 const deployer = require('../sf/deploy');
 const { cleanup } = require('../sf/cleanup');
+const { startDelete } = require('../sf/delete-job');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -172,6 +173,7 @@ router.get('/', async (req, res, next) => {
         updatedAt: r.updated_at,
         hostedUrl: `${base}/e/${r.id}`,
         artifacts: r.sf_artifacts,
+        deleteProgress: (r.sf_artifacts && r.sf_artifacts._delete) || null,
       }))
     );
   } catch (err) {
@@ -236,39 +238,22 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/deployments/:id — reverse deploy, then mark deleted.
+// DELETE /api/deployments/:id — start an ASYNC teardown and return 202.
+// Deleting synchronously can't finish inside the 30s web window: schemas keep
+// returning DEPENDENCY_EXISTS for minutes after their PP/transformer are gone
+// (org index lag). So we kick off a background runner and let the client poll
+// GET /api/deployments/:id for { deleteProgress }.
 router.delete('/:id', async (req, res, next) => {
   try {
     const row = await db.getDeployment(req.user.id, req.params.id);
     if (!row) return res.status(404).json({ error: 'not_found' });
 
-    const connRow = await db.getSfConnection(req.user.id, row.sf_connection_id);
-    let cleanupResult = { mode: 'skipped', reason: 'connection_missing' };
-    if (connRow) {
-      const conn = connectionFromRow(connRow);
-      try {
-        cleanupResult = await cleanup(conn, row.sf_artifacts);
-      } catch (err) {
-        cleanupResult = { mode: 'error', error: err.message };
-      }
-    }
+    // Mark the row 'deleting' so the list reflects it immediately, then start
+    // the async teardown (writes progress into sf_artifacts._delete).
+    await db.setDeploymentStatus(row.id, 'deleting');
+    const progress = startDelete(row);
 
-    // Only mark the demo deleted if org cleanup fully succeeded (or there were
-    // no org objects / no connection). If objects couldn't be removed, KEEP the
-    // row so the SE can retry the delete — and tell them what's still in the org
-    // instead of a silent success.
-    const orphans = (cleanupResult && cleanupResult.orphans) || [];
-    const fullyClean = cleanupResult.mode === 'complete' || cleanupResult.mode === 'skipped' || cleanupResult.mode === 'dry_run';
-    if (fullyClean) {
-      await db.markDeploymentDeleted(req.user.id, req.params.id);
-      return res.json({ ok: true, cleanup: cleanupResult });
-    }
-    return res.status(207).json({
-      ok: false,
-      cleanup: cleanupResult,
-      error: 'cleanup_incomplete',
-      detail: `${orphans.length} object(s) could not be removed from the org and were left in place; the demo was NOT deleted so you can retry. Objects: ${orphans.map((o) => `${o.type} ${o.ref}`).join(', ')}`,
-    });
+    return res.status(202).json({ ok: true, status: 'deleting', deleteProgress: progress });
   } catch (err) {
     next(err);
   }
