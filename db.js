@@ -5,9 +5,21 @@
 
 const { Pool } = require('pg');
 
-// Heroku Postgres requires SSL; local dev typically does not.
-const useSSL = /(amazonaws\.com|herokuapp\.com|\.render\.com)/.test(process.env.DATABASE_URL || '') ||
-  process.env.PGSSLMODE === 'require';
+// Heroku Postgres REQUIRES SSL; local dev typically does not. Do NOT infer SSL
+// from the DB hostname — Heroku's host patterns change over time (newer
+// instances aren't *.amazonaws/herokuapp/render), and a mismatch makes the app
+// connect WITHOUT ssl, which Heroku Postgres rejects → "Connection terminated
+// unexpectedly" on every query (looks like the whole app is down).
+//
+// Rule: SSL on whenever we're talking to a hosted DB. Detect that by NODE_ENV
+// production OR a non-local DATABASE_URL host. Opt-outs: DISABLE_PG_SSL=true
+// (forces off, for a local server), PGSSLMODE=require (forces on).
+const dbUrl = process.env.DATABASE_URL || '';
+const isLocalDb = /@(localhost|127\.0\.0\.1|::1)[:/]/.test(dbUrl) || dbUrl === '';
+const useSSL =
+  process.env.PGSSLMODE === 'require' ||
+  (process.env.DISABLE_PG_SSL !== 'true' &&
+    (process.env.NODE_ENV === 'production' || !isLocalDb));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -16,7 +28,18 @@ const pool = new Pool({
   // Bound every stage so one bad connection can't hang the whole pool and
   // stall unrelated requests (session middleware reads the DB per request).
   connectionTimeoutMillis: 5000, // give up acquiring a connection
-  idleTimeoutMillis: 30000, // release idle clients
+  // Recycle idle connections QUICKLY. AWS RDS (behind Heroku Postgres) reaps
+  // idle TCP connections after a few minutes; a pooled client that RDS already
+  // dropped is still "idle" to pg and gets handed to the next request, which
+  // then fails with "Connection terminated unexpectedly" on EVERY query until a
+  // dyno restart. Closing our own idle clients well before RDS does means we
+  // never lend a dead one. 10s idle keeps a warm connection for bursts but
+  // avoids the multi-minute window where RDS silently kills it.
+  idleTimeoutMillis: 10000, // close our idle clients before RDS reaps them
+  // Reap at most a few idle checks; also cap total lifetime so no connection
+  // lingers long enough to go stale.
+  maxLifetimeSeconds: 300, // retire any connection after 5 min (pg >= 8.10)
+  allowExitOnIdle: false,
   // 10s was too tight: persisting a demo row includes a multi-MB uploaded-HTML
   // blob, whose round-trip can exceed 10s on essential-0 and surfaced as
   // "Query read timeout" AFTER the SF objects were already created (orphans).
@@ -30,8 +53,27 @@ pool.on('error', (err) => {
   console.error('[db] unexpected idle client error', err);
 });
 
+// A dead pooled connection (RDS reaped it while idle) surfaces as "Connection
+// terminated unexpectedly" / "connection timeout" on the FIRST query that gets
+// it. That client is then discarded by pg, so an immediate retry lands on a
+// fresh connection. Retry these connection-level errors once so a stale
+// connection never becomes a user-facing 500. Real query errors (bad SQL,
+// constraint) are NOT retried — only connection-death signatures.
+function isDeadConnectionError(err) {
+  const m = String((err && err.message) || err || '');
+  return /Connection terminated|connection timeout|ECONNRESET|termination|server closed the connection|Client has encountered a connection error/i.test(m);
+}
+
 async function query(text, params) {
-  return pool.query(text, params);
+  try {
+    return await pool.query(text, params);
+  } catch (err) {
+    if (isDeadConnectionError(err)) {
+      console.warn('[db] retrying query after dead-connection error:', err.message);
+      return pool.query(text, params); // fresh client from the pool
+    }
+    throw err;
+  }
 }
 
 async function ping() {
