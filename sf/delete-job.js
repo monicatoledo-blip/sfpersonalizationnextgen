@@ -141,50 +141,39 @@ async function stepDelete(row) {
     prog.experienceConfigs = found;
     if (found.length) prog.total += found.length;
   }
-  while (prog.experienceConfigs.length && budget > 0) {
-    const { ref } = prog.experienceConfigs[0];
-    let r;
-    try {
-      await p13n.deleteExperienceConfig(conn, cId, ref);
-      prog.removed.push({ type: 'WPM Experience', ref });
-      r = 'removed';
-    } catch (err) {
-      r = isAlreadyGone(err.message) ? 'removed' : { reason: err.message };
-      if (r === 'removed') prog.removed.push({ type: 'WPM Experience', ref, alreadyGone: true });
-    }
-    budget -= 1;
-    if (r === 'removed') prog.experienceConfigs.shift();
-    else { prog.orphans.push({ type: 'WPM Experience', ref, reason: r.reason }); prog.experienceConfigs.shift(); }
-  }
-
-  // Phase 1: PPs (frees schema refs + removes nested decisions). Only after the
-  // experience configs above are cleared this pass.
-  while (!prog.experienceConfigs.length && prog.queue.pps.length && budget > 0) {
-    const { ref } = prog.queue.pps[0];
-    const r = await attempt('PersonalizationPoint', p13n.deletePoint, ref);
-    budget -= 1;
-    if (r === 'removed') prog.queue.pps.shift();
-    else { prog.orphans.push({ type: 'PersonalizationPoint', ref, reason: r.reason }); prog.queue.pps.shift(); }
-  }
-
-  // Phase 2: transformers (only after all PPs are cleared this pass).
-  while (!prog.queue.pps.length && prog.queue.transformers.length && budget > 0) {
-    const { ref } = prog.queue.transformers[0];
-    const r = await attempt('Experience Template', p13n.deleteTransformer, ref);
-    budget -= 1;
-    if (r === 'removed') prog.queue.transformers.shift();
-    else { prog.orphans.push({ type: 'Experience Template', ref, reason: r.reason }); prog.queue.transformers.shift(); }
-  }
-
-  // Phase 3: schemas (only after PPs + transformers are gone). DEPENDENCY_EXISTS
-  // means the index hasn't released yet — keep the schema queued for a later
-  // step rather than failing it. Anything else is a real orphan now.
-  const ppsAndTransformersDone = !prog.queue.pps.length && !prog.queue.transformers.length;
-  if (ppsAndTransformersDone) {
+  {
     const stillStuck = [];
-    for (const item of prog.queue.schemas) {
+    for (const item of prog.experienceConfigs) {
       if (budget <= 0) { stillStuck.push(item); continue; }
-      const r = await attempt('Content Schema', p13n.deleteSchema, item.ref);
+      let r;
+      try {
+        await p13n.deleteExperienceConfig(conn, cId, item.ref);
+        prog.removed.push({ type: 'WPM Experience', ref: item.ref });
+        r = 'removed';
+      } catch (err) {
+        if (isAlreadyGone(err.message)) { prog.removed.push({ type: 'WPM Experience', ref: item.ref, alreadyGone: true }); r = 'removed'; }
+        else r = { reason: err.message };
+      }
+      budget -= 1;
+      if (r === 'removed') continue;
+      const attempts = (item.attempts || 0) + 1;
+      if (isDependency(r.reason) && attempts < MAX_SCHEMA_ATTEMPTS) stillStuck.push({ ref: item.ref, attempts });
+      else prog.orphans.push({ type: 'WPM Experience', ref: item.ref, reason: r.reason });
+    }
+    prog.experienceConfigs = stillStuck;
+  }
+
+  // Drain one queue with RETRY semantics: a dependency error (something else
+  // still references it — the org's index lags after the referencing object was
+  // just deleted) keeps the item queued for a later step; only a non-dependency
+  // error, or exhausting MAX_ATTEMPTS, marks it a real orphan. This is why an
+  // earlier version wrongly gave up: it orphaned PPs/transformers after ONE
+  // failed attempt instead of retrying the lag like schemas do.
+  const drain = async (type, fn, queueName) => {
+    const stillStuck = [];
+    for (const item of prog.queue[queueName]) {
+      if (budget <= 0) { stillStuck.push(item); continue; }
+      const r = await attempt(type, fn, item.ref);
       budget -= 1;
       if (r === 'removed') continue;
       const attempts = (item.attempts || 0) + 1;
@@ -192,12 +181,27 @@ async function stepDelete(row) {
         stillStuck.push({ ref: item.ref, attempts });
       } else {
         prog.orphans.push({
-          type: 'Content Schema', ref: item.ref,
+          type, ref: item.ref,
           reason: isDependency(r.reason) ? 'DEPENDENCY_EXISTS after retries' : r.reason,
         });
       }
     }
-    prog.queue.schemas = stillStuck;
+    prog.queue[queueName] = stillStuck;
+  };
+
+  // Phase 1: PPs (frees schema refs + nested decisions). Only after configs.
+  if (!prog.experienceConfigs.length) await drain('PersonalizationPoint', p13n.deletePoint, 'pps');
+
+  // Phase 2: transformers (only after all PPs are cleared).
+  if (!prog.experienceConfigs.length && !prog.queue.pps.length) {
+    await drain('Experience Template', p13n.deleteTransformer, 'transformers');
+  }
+
+  // Phase 3: schemas (only after configs + PPs + transformers are gone). Same
+  // retry-on-dependency semantics — schema deletes lag behind PP/transformer
+  // deletes (the org's dependency index releases minutes later).
+  if (!prog.experienceConfigs.length && !prog.queue.pps.length && !prog.queue.transformers.length) {
+    await drain('Content Schema', p13n.deleteSchema, 'schemas');
   }
 
   // Compute terminal / running state + a human message.
