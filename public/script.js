@@ -845,14 +845,39 @@ function renderManageDemos() {
     body.appendChild(table);
   };
 
-  const load = () =>
-    api('GET', '/api/deployments').then((rows) => {
+  // One tick: reload the list, then ADVANCE any in-progress delete by one step.
+  // The step call is what actually does the teardown work — driven by this poll
+  // so it survives dyno sleep (no fragile background process).
+  const tick = () =>
+    api('GET', '/api/deployments').then(async (rows) => {
+      // Preserve optimistic "deleting" state the server hasn't caught up to yet.
+      (state.deployments || []).forEach((prev) => {
+        if (prev.status === 'deleting') {
+          const fresh = rows.find((r) => r.id === prev.id);
+          if (fresh && fresh.status === 'active' && !fresh.deleteProgress) {
+            fresh.status = 'deleting';
+            fresh.deleteProgress = prev.deleteProgress;
+          }
+        }
+      });
+
+      // Advance each deleting demo by one step, folding the returned progress
+      // back into the row so the bar reflects real work this tick.
+      const deleting = rows.filter((r) => r.status === 'deleting');
+      await Promise.all(deleting.map((r) =>
+        api('POST', '/api/deployments/' + r.id + '/delete-step')
+          .then((res) => {
+            r.deleteProgress = res.deleteProgress || r.deleteProgress;
+            if (res.done) r.status = res.status; // 'deleted' (drops next reload) or 'active' (orphans)
+          })
+          .catch(() => { /* transient; next tick retries */ })
+      ));
+
       paint(rows);
-      // Keep polling while any row is still deleting; stop when none are.
-      const anyDeleting = rows.some((r) => r.status === 'deleting');
-      if (anyDeleting && !_managePollTimer) {
-        _managePollTimer = setInterval(load, 3000);
-      } else if (!anyDeleting && _managePollTimer) {
+      const stillDeleting = rows.some((r) => r.status === 'deleting');
+      if (stillDeleting && !_managePollTimer) {
+        _managePollTimer = setInterval(tick, 3000);
+      } else if (!stillDeleting && _managePollTimer) {
         clearInterval(_managePollTimer); _managePollTimer = null;
       }
     }).catch((e) => {
@@ -860,7 +885,10 @@ function renderManageDemos() {
       body.appendChild(el('div', { class: 'banner error' }, 'Failed to load demos: ' + e.message));
     });
 
-  load();
+  // Paint immediately from cached state (shows optimistic "deleting" at once),
+  // then refresh + step from the server.
+  if (state.deployments && state.deployments.length) paint(state.deployments);
+  tick();
   return card;
 }
 
@@ -903,14 +931,22 @@ function confirmDelete(row) {
   const modalRoot = $('#modalRoot');
   modalRoot.innerHTML = '';
   const close = () => { modalRoot.innerHTML = ''; };
+  const cancelBtn = el('button', { class: 'btn secondary', onclick: close }, 'Cancel');
+  const deleteBtn = el('button', { class: 'btn danger' }, 'Delete');
+  // Instant feedback: disable both + relabel the moment it's clicked, so there's
+  // no dead gap while the async delete kicks off (prevents double-clicks).
+  deleteBtn.addEventListener('click', () => {
+    if (deleteBtn.disabled) return;
+    deleteBtn.disabled = true;
+    cancelBtn.disabled = true;
+    deleteBtn.textContent = 'Starting delete…';
+    doDelete(row.id, close);
+  });
   const modal = el('div', { class: 'modal' }, [
     el('h3', {}, 'Delete “' + row.name + '”?'),
     el('p', { class: 'small' }, 'This removes the hosted URL and attempts to delete the following objects from ' + (row.orgAlias || 'the org') + ':'),
     el('div', { class: 'id-list' }, ids.length ? ids.join('\n') : 'No org objects were recorded for this demo.'),
-    el('div', { class: 'modal-actions' }, [
-      el('button', { class: 'btn secondary', onclick: close }, 'Cancel'),
-      el('button', { class: 'btn danger', onclick: () => doDelete(row.id, close) }, 'Delete'),
-    ]),
+    el('div', { class: 'modal-actions' }, [cancelBtn, deleteBtn]),
   ]);
   modalRoot.appendChild(el('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target.className === 'modal-backdrop') close(); } }, modal));
 }
@@ -919,15 +955,25 @@ function confirmDelete(row) {
 // schema dependency-index lag means teardown can take minutes; the background
 // runner handles the retries and the row shows a live progress bar.
 async function doDelete(id, close) {
+  // Optimistically flip the row to "deleting" NOW so the UI reacts instantly —
+  // the progress bar + badge appear before the network round-trips finish.
+  const rowRef = (state.deployments || []).find((r) => r.id === id);
+  if (rowRef) {
+    rowRef.status = 'deleting';
+    rowRef.deleteProgress = { state: 'running', message: 'Starting delete…', total: 0, removed: [], orphans: [] };
+  }
+  if (typeof close === 'function') close();
+  state.route = 'manageDemos';
+  renderApp(); // shows "deleting" + progress bar immediately; polling begins
+
   try {
     await api('DELETE', '/api/deployments/' + id);
   } catch (e) {
+    // Roll back the optimistic state and tell the SE it didn't start.
+    if (rowRef) { rowRef.status = 'active'; rowRef.deleteProgress = null; }
     alert('Could not start delete: ' + e.message);
+    renderApp();
   }
-  if (typeof close === 'function') close();
-  // Re-render Manage Demos so the row flips to "deleting" and polling starts.
-  state.route = 'manageDemos';
-  renderApp();
 }
 
 // --- Connected Orgs ---

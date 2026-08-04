@@ -15,7 +15,7 @@ const build = require('../html/build');
 const { injectSdk, buildConnectorSitemap } = require('../html/inject-sdk');
 const deployer = require('../sf/deploy');
 const { cleanup } = require('../sf/cleanup');
-const { startDelete } = require('../sf/delete-job');
+const { stepDelete, initProgress } = require('../sf/delete-job');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -238,22 +238,42 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/deployments/:id — start an ASYNC teardown and return 202.
-// Deleting synchronously can't finish inside the 30s web window: schemas keep
-// returning DEPENDENCY_EXISTS for minutes after their PP/transformer are gone
-// (org index lag). So we kick off a background runner and let the client poll
-// GET /api/deployments/:id for { deleteProgress }.
+// DELETE /api/deployments/:id — begin a STEP-DRIVEN teardown. Marks the row
+// 'deleting', runs the first bounded step, and returns its progress. The client
+// then calls POST /:id/delete-step every few seconds to advance it. No
+// background process to die on dyno sleep — the browser poll is the heartbeat
+// and all progress is persisted in the DB.
 router.delete('/:id', async (req, res, next) => {
   try {
     const row = await db.getDeployment(req.user.id, req.params.id);
     if (!row) return res.status(404).json({ error: 'not_found' });
 
-    // Mark the row 'deleting' so the list reflects it immediately, then start
-    // the async teardown (writes progress into sf_artifacts._delete).
     await db.setDeploymentStatus(row.id, 'deleting');
-    const progress = startDelete(row);
+    // Seed initial progress so the row shows the bar immediately, then run one
+    // step (deletes the first batch) before responding — instant real progress.
+    await db.setDeleteProgress(row.id, initProgress(row));
+    const fresh = await db.getDeploymentById(row.id);
+    const { progress } = await stepDelete(fresh);
 
     return res.status(202).json({ ok: true, status: 'deleting', deleteProgress: progress });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/deployments/:id/delete-step — advance the teardown by one bounded
+// step. Idempotent + safe to call repeatedly; returns { done, deleteProgress }.
+// Driven by the Manage Demos poll so the work survives dyno sleep/restart.
+router.post('/:id/delete-step', async (req, res, next) => {
+  try {
+    const row = await db.getDeployment(req.user.id, req.params.id);
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    // Only step rows that are actually mid-delete.
+    if (row.status !== 'deleting') {
+      return res.json({ done: true, status: row.status, deleteProgress: (row.sf_artifacts && row.sf_artifacts._delete) || null });
+    }
+    const { done, progress } = await stepDelete(row);
+    return res.json({ done, status: done ? (progress.state === 'complete' ? 'deleted' : 'active') : 'deleting', deleteProgress: progress });
   } catch (err) {
     next(err);
   }
