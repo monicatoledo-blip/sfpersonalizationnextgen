@@ -24,8 +24,10 @@ const p13n = require('./p13n');
 const MAX_DELETES_PER_STEP = 12;
 
 // A schema that has hit DEPENDENCY_EXISTS this many steps in a row is reported
-// as a manual-cleanup orphan (the lag should clear well within this many polls).
-const MAX_SCHEMA_ATTEMPTS = 40;
+// as a manual-cleanup orphan. The dependency-index lag is intermittent and has
+// been observed as long as ~5+ minutes live; at ~3s/poll, 200 attempts ≈ 10 min
+// of retrying, comfortably past observed lag before we call it a real orphan.
+const MAX_SCHEMA_ATTEMPTS = 200;
 
 function isAlreadyGone(msg) {
   return /not.?found|does not exist|no resource found|NOT_FOUND|INVALID_API_INPUT/i.test(String(msg || ''));
