@@ -41,20 +41,31 @@ function readArtifacts(raw) {
     pps: a.pps || [],
     transformers: a.transformers || [],
     schemas: a.schemas || [],
+    connector: a.connector || (a.artifacts && a.artifacts.connector) || null,
   };
+}
+
+// Extract a bare connector UUID from either a UUID or a pasted beacon URL.
+function connectorId(raw) {
+  const m = String(raw || '').match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  return m ? m[0] : null;
 }
 
 const refOf = (o) => o.id || o.name;
 
 // Build a fresh progress object from the artifacts (first step only).
 function initProgress(row) {
-  const { pps, transformers, schemas } = readArtifacts(row.sf_artifacts);
+  const { pps, transformers, schemas, connector } = readArtifacts(row.sf_artifacts);
   const now = new Date().toISOString();
   return {
     state: 'running',
     startedAt: now,
     updatedAt: now,
     total: pps.length + transformers.length + schemas.length,
+    connector: connectorId(connector),
+    // Experience configs (WPM-authored) are discovered on the first step (needs
+    // a live connection). null = not yet discovered; [] = none / done.
+    experienceConfigs: null,
     // Work queues by type; each entry { ref, attempts }.
     queue: {
       pps: pps.map((p) => ({ ref: refOf(p) })).filter((x) => x.ref),
@@ -109,8 +120,46 @@ async function stepDelete(row) {
     }
   };
 
-  // Phase 1: PPs (frees schema refs + removes nested decisions).
-  while (prog.queue.pps.length && budget > 0) {
+  // Phase 0: WPM experience configs. If the SE authored in WPM, each PP has an
+  // experience config that BLOCKS the PP delete. Discover them once (needs the
+  // connector + a live connection), then delete before touching PPs. Best-effort
+  // discovery: if we can't list (no connector, endpoint absent), skip to PPs and
+  // let any block surface as an orphan.
+  const cId = prog.connector;
+  if (prog.experienceConfigs === null) {
+    const found = [];
+    if (cId) {
+      const ppNames = readArtifacts(row.sf_artifacts).pps.map(refOf).filter(Boolean);
+      for (const ppName of ppNames) {
+        const configs = await p13n.listExperienceConfigs(conn, cId, { personalizationPointNameOrId: ppName });
+        for (const c of configs) {
+          const ref = c.name || c.id;
+          if (ref && !found.some((f) => f.ref === ref)) found.push({ ref });
+        }
+      }
+    }
+    prog.experienceConfigs = found;
+    if (found.length) prog.total += found.length;
+  }
+  while (prog.experienceConfigs.length && budget > 0) {
+    const { ref } = prog.experienceConfigs[0];
+    let r;
+    try {
+      await p13n.deleteExperienceConfig(conn, cId, ref);
+      prog.removed.push({ type: 'WPM Experience', ref });
+      r = 'removed';
+    } catch (err) {
+      r = isAlreadyGone(err.message) ? 'removed' : { reason: err.message };
+      if (r === 'removed') prog.removed.push({ type: 'WPM Experience', ref, alreadyGone: true });
+    }
+    budget -= 1;
+    if (r === 'removed') prog.experienceConfigs.shift();
+    else { prog.orphans.push({ type: 'WPM Experience', ref, reason: r.reason }); prog.experienceConfigs.shift(); }
+  }
+
+  // Phase 1: PPs (frees schema refs + removes nested decisions). Only after the
+  // experience configs above are cleared this pass.
+  while (!prog.experienceConfigs.length && prog.queue.pps.length && budget > 0) {
     const { ref } = prog.queue.pps[0];
     const r = await attempt('PersonalizationPoint', p13n.deletePoint, ref);
     budget -= 1;
@@ -152,7 +201,8 @@ async function stepDelete(row) {
   }
 
   // Compute terminal / running state + a human message.
-  const outstanding = prog.queue.pps.length + prog.queue.transformers.length + prog.queue.schemas.length;
+  const ecOutstanding = (prog.experienceConfigs || []).length;
+  const outstanding = ecOutstanding + prog.queue.pps.length + prog.queue.transformers.length + prog.queue.schemas.length;
   prog.updatedAt = new Date().toISOString();
 
   if (outstanding === 0) {
@@ -168,7 +218,8 @@ async function stepDelete(row) {
   }
 
   // Still running: describe the current phase.
-  if (prog.queue.pps.length) prog.message = `Removing Personalization Points (${prog.queue.pps.length} left)…`;
+  if (ecOutstanding) prog.message = `Removing WPM experiences (${ecOutstanding} left)…`;
+  else if (prog.queue.pps.length) prog.message = `Removing Personalization Points (${prog.queue.pps.length} left)…`;
   else if (prog.queue.transformers.length) prog.message = `Removing Experience Templates (${prog.queue.transformers.length} left)…`;
   else prog.message = `Waiting for ${prog.queue.schemas.length} schema dependency(ies) to release…`;
   await db.setDeleteProgress(id, prog);

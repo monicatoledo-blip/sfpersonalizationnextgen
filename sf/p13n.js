@@ -161,6 +161,35 @@ async function deletePoint(conn, idOrName) {
   return { deleted: idOrName };
 }
 
+// --- Web Personalization Manager experience configs -----------------------------
+// When an SE AUTHORS an experience in WPM, it creates a PersnlExperience /
+// PersnlExperienceDef ("experience config") bound to the PP. That reference
+// BLOCKS deleting the PP ("Remove these dependencies: [PersnlExperience,
+// PersnlExperienceDef]"), so teardown must delete these FIRST. They live under
+// the Website CONNECTOR, not the PP, so every call needs the connector id.
+
+// List experience configs for a connector, optionally filtered to one PP.
+// Returns [] on any error (best-effort: a connector with none, or an org that
+// doesn't expose the endpoint, should not block teardown).
+async function listExperienceConfigs(conn, connectorId, { personalizationPointNameOrId } = {}) {
+  if (!connectorId) return [];
+  let url = `${BASE}/external-apps/${encodeURIComponent(connectorId)}/personalization-experience-configs?limit=200`;
+  if (personalizationPointNameOrId) {
+    url += `&personalizationPointNameOrId=${encodeURIComponent(personalizationPointNameOrId)}`;
+  }
+  try {
+    const res = await get(conn, url);
+    return (res && res.personalizationExperienceConfigs) || [];
+  } catch (_) {
+    return [];
+  }
+}
+
+async function deleteExperienceConfig(conn, connectorId, nameOrId) {
+  await del(conn, `${BASE}/external-apps/${encodeURIComponent(connectorId)}/personalization-experience-configs/${encodeURIComponent(nameOrId)}`);
+  return { deleted: nameOrId };
+}
+
 module.exports = {
   PATHS,
   getOrgInfo,
@@ -170,4 +199,6 @@ module.exports = {
   deleteTransformer,
   createPoint,
   deletePoint,
+  listExperienceConfigs,
+  deleteExperienceConfig,
 };
