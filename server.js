@@ -100,6 +100,18 @@ app.use((err, req, res, next) => {
   });
 });
 
+// --- Crash guards ---
+// A single unhandled promise rejection or uncaught exception ANYWHERE (incl.
+// background work like the delete job) would otherwise kill the dyno and force
+// a restart. Log and stay up instead — a stray error in one request/job must
+// never take the whole app down. (Express already handles per-request errors.)
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] unhandledRejection (kept alive):', reason && reason.stack ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] uncaughtException (kept alive):', err && err.stack ? err.stack : err);
+});
+
 const PORT = process.env.PORT || 3000;
 
 async function start() {
