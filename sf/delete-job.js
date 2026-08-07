@@ -29,11 +29,29 @@ const MAX_DELETES_PER_STEP = 12;
 // of retrying, comfortably past observed lag before we call it a real orphan.
 const MAX_SCHEMA_ATTEMPTS = 200;
 
-function isAlreadyGone(msg) {
-  return /not.?found|does not exist|no resource found|NOT_FOUND|INVALID_API_INPUT/i.test(String(msg || ''));
+// "Already gone" = the object we tried to delete doesn't exist (a prior run /
+// manual cleanup removed it). Treat as success, not an orphan. Check the
+// flattened message AND the raw jsforce error (status 404, errorCode NOT_FOUND
+// / INVALID_API_INPUT) — the message alone sometimes doesn't carry the body.
+function isAlreadyGone(err) {
+  const msg = String((err && err.message) || err || '');
+  if (/not.?found|does not exist|no resource found|NOT_FOUND|INVALID_API_INPUT|could not find/i.test(msg)) return true;
+  const cause = err && err.cause;
+  if (cause) {
+    if (cause.statusCode === 404 || cause.status === 404 || cause.errorCode === 'NOT_FOUND' || cause.errorCode === 'INVALID_API_INPUT') return true;
+    const body = cause.content || cause.body;
+    const arr = Array.isArray(body) ? body : (body ? [body] : []);
+    if (arr.some((e) => /NOT_FOUND|INVALID_API_INPUT|does not exist|could not find/i.test(String((e && (e.errorCode || e.message)) || '')))) return true;
+  }
+  return false;
 }
-function isDependency(msg) {
-  return /DEPENDENCY_EXISTS|referenced/i.test(String(msg || ''));
+function isDependency(err) {
+  const msg = String((err && err.message) || err || '');
+  if (/DEPENDENCY_EXISTS|referenced/i.test(msg)) return true;
+  const cause = err && err.cause;
+  const body = cause && (cause.content || cause.body);
+  const arr = Array.isArray(body) ? body : (body ? [body] : []);
+  return arr.some((e) => /DEPENDENCY_EXISTS|referenced/i.test(String((e && (e.errorCode || e.message)) || '')));
 }
 
 // Normalize artifacts to arrays regardless of wrapper shape.
@@ -117,8 +135,19 @@ async function stepDelete(row) {
       prog.removed.push({ type, ref });
       return 'removed';
     } catch (err) {
-      if (isAlreadyGone(err.message)) { prog.removed.push({ type, ref, alreadyGone: true }); return 'removed'; }
-      return { reason: err.message };
+      if (isAlreadyGone(err)) { prog.removed.push({ type, ref, alreadyGone: true }); return 'removed'; }
+      // Diagnostic: log the exact error shape so we can see WHY a delete wasn't
+      // classified as already-gone/dependency (message + cause statusCode/body).
+      const cause = err && err.cause;
+      console.warn('[delete-job] non-gone delete error', JSON.stringify({
+        type, ref, message: err && err.message,
+        causeStatus: cause && (cause.statusCode || cause.status),
+        causeErrorCode: cause && cause.errorCode,
+        causeBody: cause && (cause.content || cause.body),
+      }));
+      // Carry both the message (for display) and the raw error (for accurate
+      // dependency classification against .cause).
+      return { reason: err.message, err };
     }
   };
 
@@ -153,13 +182,13 @@ async function stepDelete(row) {
         prog.removed.push({ type: 'WPM Experience', ref: item.ref });
         r = 'removed';
       } catch (err) {
-        if (isAlreadyGone(err.message)) { prog.removed.push({ type: 'WPM Experience', ref: item.ref, alreadyGone: true }); r = 'removed'; }
-        else r = { reason: err.message };
+        if (isAlreadyGone(err)) { prog.removed.push({ type: 'WPM Experience', ref: item.ref, alreadyGone: true }); r = 'removed'; }
+        else r = { reason: err.message, err };
       }
       budget -= 1;
       if (r === 'removed') continue;
       const attempts = (item.attempts || 0) + 1;
-      if (isDependency(r.reason) && attempts < MAX_SCHEMA_ATTEMPTS) stillStuck.push({ ref: item.ref, attempts });
+      if (isDependency(r.err) && attempts < MAX_SCHEMA_ATTEMPTS) stillStuck.push({ ref: item.ref, attempts });
       else prog.orphans.push({ type: 'WPM Experience', ref: item.ref, reason: r.reason });
     }
     prog.experienceConfigs = stillStuck;
@@ -179,12 +208,12 @@ async function stepDelete(row) {
       budget -= 1;
       if (r === 'removed') continue;
       const attempts = (item.attempts || 0) + 1;
-      if (isDependency(r.reason) && attempts < MAX_SCHEMA_ATTEMPTS) {
+      if (isDependency(r.err) && attempts < MAX_SCHEMA_ATTEMPTS) {
         stillStuck.push({ ref: item.ref, attempts });
       } else {
         prog.orphans.push({
           type, ref: item.ref,
-          reason: isDependency(r.reason) ? 'DEPENDENCY_EXISTS after retries' : r.reason,
+          reason: isDependency(r.err) ? 'DEPENDENCY_EXISTS after retries' : r.reason,
         });
       }
     }
