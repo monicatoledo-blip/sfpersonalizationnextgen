@@ -967,7 +967,20 @@ async function doDelete(id, close) {
   renderApp(); // shows "deleting" + progress bar immediately; polling begins
 
   try {
-    await api('DELETE', '/api/deployments/' + id);
+    const res = await api('DELETE', '/api/deployments/' + id);
+    // The DELETE runs the first step synchronously. When every object is
+    // already-gone (e.g. a retry after a prior manual cleanup), that single
+    // step finishes the whole teardown and the demo is already 'deleted' —
+    // there's no 'deleting' row for the poll to latch onto, so it would never
+    // refresh. Reconcile from the response: if it's done, re-render Manage
+    // Demos (which re-fetches and drops the now-deleted row). If still
+    // deleting, fold the fresh progress in so the bar reflects real state.
+    const done = res && (res.status === 'deleted' || (res.deleteProgress && res.deleteProgress.state === 'complete'));
+    if (rowRef) {
+      if (done) { rowRef.status = 'deleted'; }
+      else if (res && res.deleteProgress) { rowRef.deleteProgress = res.deleteProgress; }
+    }
+    if (state.route === 'manageDemos') renderApp();
   } catch (e) {
     // Roll back the optimistic state and tell the SE it didn't start.
     if (rowRef) { rowRef.status = 'active'; rowRef.deleteProgress = null; }

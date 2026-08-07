@@ -253,9 +253,14 @@ router.delete('/:id', async (req, res, next) => {
     // step (deletes the first batch) before responding — instant real progress.
     await db.setDeleteProgress(row.id, initProgress(row));
     const fresh = await db.getDeploymentById(row.id);
-    const { progress } = await stepDelete(fresh);
+    const { done, progress } = await stepDelete(fresh);
 
-    return res.status(202).json({ ok: true, status: 'deleting', deleteProgress: progress });
+    // Report the ACTUAL state: when every object was already-gone (e.g. a retry
+    // after manual cleanup), the single step finishes the whole teardown, so the
+    // demo is already 'deleted' / needs no further polling. Don't hardcode
+    // 'deleting' — that left the client waiting on a poll that never came.
+    const status = done ? (progress.state === 'complete' ? 'deleted' : 'active') : 'deleting';
+    return res.status(202).json({ ok: true, done: !!done, status, deleteProgress: progress });
   } catch (err) {
     next(err);
   }
