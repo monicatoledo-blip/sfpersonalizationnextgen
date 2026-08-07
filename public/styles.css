@@ -252,8 +252,29 @@ table.demos th {
 .badge.deleting { background: #eaf4fc; color: #17618e; }
 
 /* Live delete progress bar (Manage Demos). */
-.progress-track { height: 8px; background: #e6ebf0; border-radius: 999px; overflow: hidden; margin-top: 6px; }
+.progress-track { height: 8px; background: #e6ebf0; border-radius: 999px; overflow: hidden; margin-top: 6px; position: relative; }
 .progress-fill { height: 100%; background: linear-gradient(90deg, #2a94d6, #47b4ea); border-radius: 999px; transition: width .4s ease; }
+/* Indeterminate: a stripe that slides continuously so the SE SEES it working
+   even when a step is waiting on the org (prevents "is it stuck?" button spam). */
+.progress-track.indeterminate .progress-fill {
+  width: 40% !important;
+  position: absolute; left: 0;
+  animation: sp-indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes sp-indeterminate {
+  0%   { left: -40%; }
+  100% { left: 100%; }
+}
+/* Deleting badge: a subtle pulse so the row status reads as "in progress". */
+.badge.deleting { animation: sp-pulse 1.2s ease-in-out infinite; }
+@keyframes sp-pulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
+.btn.is-busy { position: relative; color: transparent !important; }
+.btn.is-busy::after {
+  content: ""; position: absolute; inset: 0; margin: auto; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%;
+  animation: sp-spin .7s linear infinite;
+}
+@keyframes sp-spin { to { transform: rotate(360deg); } }
 
 /* --- Modal --- */
 .modal-backdrop {

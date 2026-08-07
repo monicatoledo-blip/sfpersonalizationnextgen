@@ -896,25 +896,37 @@ function renderManageDemos() {
 // leftovers) the honest "verify manually" report + a Retry button.
 function renderDeleteProgress(row, prog) {
   const wrap = el('div', { style: 'padding:4px 2px' });
-  if (!prog) {
-    wrap.appendChild(el('div', { class: 'small muted' }, 'Starting delete…'));
-    return wrap;
-  }
-  const total = prog.total || 0;
-  const done = (prog.removed || []).length + (prog.orphans || []).length;
-  const pct = total ? Math.round((done / total) * 100) : (prog.state === 'complete' ? 100 : 10);
+  const running = !prog || prog.state === 'running' || prog.state === undefined;
+  const total = (prog && prog.total) || 0;
+  const done = prog ? ((prog.removed || []).length + (prog.orphans || []).length) : 0;
 
-  wrap.appendChild(el('div', { class: 'small', style: 'font-weight:600;color:#17618e' }, prog.message || 'Removing objects…'));
-  const track = el('div', { class: 'progress-track' }, el('div', { class: 'progress-fill', style: 'width:' + pct + '%' }));
+  // Message: always present so the row never looks idle.
+  wrap.appendChild(el('div', { class: 'small', style: 'font-weight:600;color:#17618e' },
+    (prog && prog.message) || 'Starting delete… this can take a moment while Salesforce releases each object.'));
+
+  // Bar: INDETERMINATE (animated stripe) while running so the SE always sees
+  // motion — even when a step is waiting on the org's dependency lag. Switches
+  // to a real filled bar only once we have counted progress or it's finished.
+  const hasCount = total > 0 && done > 0;
+  const track = el('div', { class: 'progress-track' + (running && !hasCount ? ' indeterminate' : '') },
+    el('div', { class: 'progress-fill', style: running && !hasCount ? '' : ('width:' + (total ? Math.round((done / total) * 100) : 100) + '%') }));
   wrap.appendChild(track);
+  if (hasCount) {
+    wrap.appendChild(el('div', { class: 'small muted', style: 'margin-top:4px' }, `${done} of ${total} removed…`));
+  }
 
   if (prog.state === 'incomplete' && (prog.orphans || []).length) {
     wrap.appendChild(el('div', { class: 'banner warn small', style: 'margin-top:10px' },
       (prog.orphans.length) + ' object(s) could not be removed and were left in the org. Verify/remove manually in Salesforce: ' +
       prog.orphans.map((o) => `${o.type} ${o.ref}`).join(', ')));
-    wrap.appendChild(el('div', { style: 'margin-top:8px' }, [
-      el('button', { class: 'btn danger small', onclick: () => doDelete(row.id) }, 'Retry delete'),
-    ]));
+    const retryBtn = el('button', { class: 'btn danger small' }, 'Retry delete');
+    retryBtn.addEventListener('click', () => {
+      if (retryBtn.disabled) return;
+      retryBtn.disabled = true;
+      retryBtn.classList.add('is-busy');
+      doDelete(row.id);
+    });
+    wrap.appendChild(el('div', { style: 'margin-top:8px' }, [retryBtn]));
   }
   return wrap;
 }
@@ -935,12 +947,16 @@ function confirmDelete(row) {
   const deleteBtn = el('button', { class: 'btn danger' }, 'Delete');
   // Instant feedback: disable both + relabel the moment it's clicked, so there's
   // no dead gap while the async delete kicks off (prevents double-clicks).
-  deleteBtn.addEventListener('click', () => {
+  deleteBtn.addEventListener('click', async () => {
     if (deleteBtn.disabled) return;
     deleteBtn.disabled = true;
     cancelBtn.disabled = true;
+    deleteBtn.classList.add('is-busy'); // spinner overlay; text hidden
     deleteBtn.textContent = 'Starting delete…';
-    doDelete(row.id, close);
+    // Keep the modal open (with the spinner) until the first delete step
+    // returns, so there's NO blank gap that tempts a re-click. doDelete closes
+    // it and renders the row's live progress once the server has responded.
+    await doDelete(row.id, close);
   });
   const modal = el('div', { class: 'modal' }, [
     el('h3', {}, 'Delete “' + row.name + '”?'),
@@ -955,19 +971,21 @@ function confirmDelete(row) {
 // schema dependency-index lag means teardown can take minutes; the background
 // runner handles the retries and the row shows a live progress bar.
 async function doDelete(id, close) {
-  // Optimistically flip the row to "deleting" NOW so the UI reacts instantly —
-  // the progress bar + badge appear before the network round-trips finish.
+  // Optimistically flip the row to "deleting" so the list reflects it the moment
+  // the modal closes (no blank gap → no re-click).
   const rowRef = (state.deployments || []).find((r) => r.id === id);
   if (rowRef) {
     rowRef.status = 'deleting';
     rowRef.deleteProgress = { state: 'running', message: 'Starting delete…', total: 0, removed: [], orphans: [] };
   }
-  if (typeof close === 'function') close();
-  state.route = 'manageDemos';
-  renderApp(); // shows "deleting" + progress bar immediately; polling begins
 
   try {
+    // Keep the modal open (its button is already showing a spinner) UNTIL the
+    // first step returns, so the SE sees continuous "working" feedback rather
+    // than a dead gap. Then close the modal and render the row's live state.
     const res = await api('DELETE', '/api/deployments/' + id);
+    if (typeof close === 'function') close();
+    state.route = 'manageDemos';
     // The DELETE runs the first step synchronously. When every object is
     // already-gone (e.g. a retry after a prior manual cleanup), that single
     // step finishes the whole teardown and the demo is already 'deleted' —
@@ -984,6 +1002,7 @@ async function doDelete(id, close) {
   } catch (e) {
     // Roll back the optimistic state and tell the SE it didn't start.
     if (rowRef) { rowRef.status = 'active'; rowRef.deleteProgress = null; }
+    if (typeof close === 'function') close();
     alert('Could not start delete: ' + e.message);
     renderApp();
   }
