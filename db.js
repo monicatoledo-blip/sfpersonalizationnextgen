@@ -46,7 +46,11 @@ const pool = new Pool({
   // 25s still bounds a genuinely stuck query well within reason.
   statement_timeout: 25000, // server-side kill of a slow query
   query_timeout: 25000, // client-side kill of a slow query
+  // TCP keepalive is the real defense against RDS silently dropping idle
+  // sockets: send probes starting 10s in so the OS keeps the connection alive
+  // (and detects a truly dead one) instead of us later handing out a zombie.
   keepAlive: true,
+  keepAliveInitialDelayMillis: 10000,
 });
 
 pool.on('error', (err) => {
@@ -76,6 +80,39 @@ async function query(text, params) {
   }
 }
 
+// Proxy pool for connect-pg-simple: identical to `pool` but its query() retries
+// once on a dead-connection error. connect-pg-simple calls pool.query in BOTH
+// promise and callback (text, params, cb) forms, so support both — this is what
+// stops a zombie connection from 500'ing every page load via the session store.
+const sessionPool = new Proxy(pool, {
+  get(target, prop) {
+    if (prop !== 'query') {
+      const v = target[prop];
+      return typeof v === 'function' ? v.bind(target) : v;
+    }
+    return function pooledQuery(text, params, cb) {
+      // Normalize the callback (params may be omitted).
+      if (typeof params === 'function') { cb = params; params = undefined; }
+      const run = () => target.query(text, params);
+      if (typeof cb === 'function') {
+        run().then(
+          (res) => cb(null, res),
+          (err) => {
+            if (isDeadConnectionError(err)) {
+              run().then((res) => cb(null, res), (err2) => cb(err2));
+            } else cb(err);
+          }
+        );
+        return undefined;
+      }
+      return run().catch((err) => {
+        if (isDeadConnectionError(err)) return run();
+        throw err;
+      });
+    };
+  },
+});
+
 async function ping() {
   const { rows } = await pool.query('SELECT 1 AS ok');
   return rows[0] && rows[0].ok === 1;
@@ -83,6 +120,18 @@ async function ping() {
 
 const SCHEMA_SQL = `
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- Session store table for connect-pg-simple. We create it here (idempotent)
+-- and turn OFF the library's createTableIfMissing, because that per-store
+-- schema check was running an extra query that grabbed dead pooled connections
+-- and 500'd every page load. Definition matches connect-pg-simple's table.sql.
+CREATE TABLE IF NOT EXISTS "session" (
+  "sid"    varchar NOT NULL COLLATE "default",
+  "sess"   json NOT NULL,
+  "expire" timestamp(6) NOT NULL,
+  CONSTRAINT "session_pkey" PRIMARY KEY ("sid") NOT DEFERRABLE INITIALLY IMMEDIATE
+);
+CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
 
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -350,6 +399,7 @@ async function listExpiredDeployments() {
 
 module.exports = {
   pool,
+  sessionPool,
   query,
   ping,
   initSchema,

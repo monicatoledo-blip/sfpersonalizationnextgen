@@ -26,9 +26,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(
   session({
     store: new PgSession({
-      pool: db.pool,
+      // Retry-wrapped pool: survives a dead RDS connection instead of 500'ing
+      // the page load (session read happens on every request).
+      pool: db.sessionPool,
       tableName: 'session',
-      createTableIfMissing: true,
+      // The session table already exists (created at first boot). Leaving
+      // createTableIfMissing on makes connect-pg-simple run an EXTRA schema-check
+      // query (_rawEnsureSessionStoreTable) that was grabbing dead pooled
+      // connections and 500'ing every page load ("Connection terminated"). Off =
+      // that failure path is gone; the table is created by db.initSchema anyway.
+      createTableIfMissing: false,
       disableTouch: true, // don't rewrite the session row on every GET
       pruneSessionInterval: 60 * 15, // prune every 15 min, not per-request
     }),
