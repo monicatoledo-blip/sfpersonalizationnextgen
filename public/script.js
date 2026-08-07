@@ -646,6 +646,8 @@ async function runDeploy() {
   const steps = ['Creating Content Schemas', 'Creating Experience Template', 'Creating Personalization Points + Decisions', 'Generating hosted URL', 'Done'];
   const stepList = el('ul', { class: 'steps' }, steps.map((s) => el('li', {}, s)));
   statusArea.innerHTML = '';
+  statusArea.appendChild(el('div', { class: 'banner info small' },
+    'Deploying to your SDO — this can take up to a minute or two while Salesforce creates each object. Please keep this tab open until it finishes.'));
   statusArea.appendChild(stepList);
   const setStep = (i, cls) => { if (stepList.children[i]) stepList.children[i].className = cls; };
   setStep(0, 'active');
@@ -915,7 +917,15 @@ function renderDeleteProgress(row, prog) {
     wrap.appendChild(el('div', { class: 'small muted', style: 'margin-top:4px' }, `${done} of ${total} removed…`));
   }
 
-  if (prog.state === 'incomplete' && (prog.orphans || []).length) {
+  // While running, set the expectation clearly: the org releases each object on
+  // its own schedule (up to ~10 min), and this tab drives the teardown, so the
+  // SE must not leave or refresh until it finishes.
+  if (running) {
+    wrap.appendChild(el('div', { class: 'banner warn small', style: 'margin-top:8px' },
+      'This can take up to 10 minutes — Salesforce releases each object on its own schedule. Please do not leave or refresh this page until it finishes.'));
+  }
+
+  if (prog && prog.state === 'incomplete' && (prog.orphans || []).length) {
     wrap.appendChild(el('div', { class: 'banner warn small', style: 'margin-top:10px' },
       (prog.orphans.length) + ' object(s) could not be removed and were left in the org. Verify/remove manually in Salesforce: ' +
       prog.orphans.map((o) => `${o.type} ${o.ref}`).join(', ')));
