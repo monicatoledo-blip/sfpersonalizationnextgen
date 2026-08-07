@@ -33,15 +33,23 @@ const MAX_SCHEMA_ATTEMPTS = 200;
 // manual cleanup removed it). Treat as success, not an orphan. Check the
 // flattened message AND the raw jsforce error (status 404, errorCode NOT_FOUND
 // / INVALID_API_INPUT) — the message alone sometimes doesn't carry the body.
+// "Already gone" signatures. Deleting a Personalization object that no longer
+// exists returns DIFFERENT errors depending on how it's referenced:
+//   - by a stale id  -> INVALID_CROSS_REFERENCE_KEY / "invalid cross reference id"
+//   - by name        -> INVALID_API_INPUT / "could not find"
+//   - other paths    -> NOT_FOUND / 404 / "does not exist"
+// All mean the same thing for teardown: success, not an orphan.
+const GONE_RE = /not.?found|does not exist|no resource found|NOT_FOUND|INVALID_API_INPUT|could not find|invalid cross.?reference|INVALID_CROSS_REFERENCE_KEY/i;
 function isAlreadyGone(err) {
   const msg = String((err && err.message) || err || '');
-  if (/not.?found|does not exist|no resource found|NOT_FOUND|INVALID_API_INPUT|could not find/i.test(msg)) return true;
+  if (GONE_RE.test(msg)) return true;
   const cause = err && err.cause;
   if (cause) {
-    if (cause.statusCode === 404 || cause.status === 404 || cause.errorCode === 'NOT_FOUND' || cause.errorCode === 'INVALID_API_INPUT') return true;
+    if (cause.statusCode === 404 || cause.status === 404) return true;
+    if (['NOT_FOUND', 'INVALID_API_INPUT', 'INVALID_CROSS_REFERENCE_KEY'].includes(cause.errorCode)) return true;
     const body = cause.content || cause.body;
     const arr = Array.isArray(body) ? body : (body ? [body] : []);
-    if (arr.some((e) => /NOT_FOUND|INVALID_API_INPUT|does not exist|could not find/i.test(String((e && (e.errorCode || e.message)) || '')))) return true;
+    if (arr.some((e) => GONE_RE.test(String((e && (e.errorCode || e.message)) || '')))) return true;
   }
   return false;
 }
