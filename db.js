@@ -59,59 +59,55 @@ pool.on('error', (err) => {
 
 // A dead pooled connection (RDS reaped it while idle) surfaces as "Connection
 // terminated unexpectedly" / "connection timeout" on the FIRST query that gets
-// it. That client is then discarded by pg, so an immediate retry lands on a
-// fresh connection. Retry these connection-level errors once so a stale
-// connection never becomes a user-facing 500. Real query errors (bad SQL,
-// constraint) are NOT retried — only connection-death signatures.
+// it. pg then discards that client, so an immediate retry lands on a fresh
+// connection. We retry these connection-level errors once. Real query errors
+// (bad SQL, constraint) are NOT retried — only connection-death signatures.
 function isDeadConnectionError(err) {
   const m = String((err && err.message) || err || '');
   return /Connection terminated|connection timeout|ECONNRESET|termination|server closed the connection|Client has encountered a connection error/i.test(m);
 }
 
-async function query(text, params) {
-  try {
-    return await pool.query(text, params);
-  } catch (err) {
+// Patch pool.query AT THE SOURCE so EVERY caller is protected — all db.js
+// helpers, the deploy path, the delete job, and the session store all go
+// through pool.query, and previously only the standalone query() wrapper
+// retried. A dead connection was still killing the deploy ("Connection
+// terminated due to connection timeout" at the first DB call). Now one retry
+// on a fresh connection is automatic everywhere. Supports promise + callback
+// (text, params, cb) forms, since connect-pg-simple uses callbacks.
+const _rawQuery = pool.query.bind(pool);
+pool.query = function retryingQuery(text, params, cb) {
+  if (typeof params === 'function') { cb = params; params = undefined; }
+  const attempt = () => _rawQuery(text, params);
+  if (typeof cb === 'function') {
+    attempt().then(
+      (res) => cb(null, res),
+      (err) => {
+        if (isDeadConnectionError(err)) {
+          console.warn('[db] retrying query after dead-connection error:', err.message);
+          attempt().then((res) => cb(null, res), (e2) => cb(e2));
+        } else cb(err);
+      }
+    );
+    return undefined;
+  }
+  return attempt().catch((err) => {
     if (isDeadConnectionError(err)) {
       console.warn('[db] retrying query after dead-connection error:', err.message);
-      return pool.query(text, params); // fresh client from the pool
+      return attempt();
     }
     throw err;
-  }
+  });
+};
+
+// Back-compat: db.query() still works (now just delegates to the patched pool).
+async function query(text, params) {
+  return pool.query(text, params);
 }
 
-// Proxy pool for connect-pg-simple: identical to `pool` but its query() retries
-// once on a dead-connection error. connect-pg-simple calls pool.query in BOTH
-// promise and callback (text, params, cb) forms, so support both — this is what
-// stops a zombie connection from 500'ing every page load via the session store.
-const sessionPool = new Proxy(pool, {
-  get(target, prop) {
-    if (prop !== 'query') {
-      const v = target[prop];
-      return typeof v === 'function' ? v.bind(target) : v;
-    }
-    return function pooledQuery(text, params, cb) {
-      // Normalize the callback (params may be omitted).
-      if (typeof params === 'function') { cb = params; params = undefined; }
-      const run = () => target.query(text, params);
-      if (typeof cb === 'function') {
-        run().then(
-          (res) => cb(null, res),
-          (err) => {
-            if (isDeadConnectionError(err)) {
-              run().then((res) => cb(null, res), (err2) => cb(err2));
-            } else cb(err);
-          }
-        );
-        return undefined;
-      }
-      return run().catch((err) => {
-        if (isDeadConnectionError(err)) return run();
-        throw err;
-      });
-    };
-  },
-});
+// connect-pg-simple uses this same pool; since pool.query is now retry-wrapped
+// at the source (above), the session store is protected too. Kept as a named
+// export for clarity at the call site.
+const sessionPool = pool;
 
 async function ping() {
   const { rows } = await pool.query('SELECT 1 AS ok');
