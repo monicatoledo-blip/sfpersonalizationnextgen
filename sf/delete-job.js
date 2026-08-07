@@ -118,6 +118,19 @@ async function stepDelete(row) {
   // queue) by rebuilding from the still-recorded artifacts.
   const prog = existing && existing.queue ? existing : initProgress(row);
 
+  // DIAGNOSTIC: log where this step starts so we can see if the transformer
+  // queue was ever populated + how the artifacts were read. (Root-causing the
+  // transformer no-op / skipped-phase bug.)
+  const _art = readArtifacts(row.sf_artifacts);
+  console.warn('[delete-job] step start', JSON.stringify({
+    id,
+    fromSaved: !!(existing && existing.queue),
+    artifactCounts: { pps: _art.pps.length, transformers: _art.transformers.length, schemas: _art.schemas.length },
+    queueCounts: prog.queue ? { pps: prog.queue.pps.length, transformers: prog.queue.transformers.length, schemas: prog.queue.schemas.length } : null,
+    experienceConfigs: prog.experienceConfigs === null ? 'undiscovered' : prog.experienceConfigs.length,
+    state: prog.state,
+  }));
+
   if (prog.state === 'complete' || prog.state === 'incomplete') {
     return { done: true, progress: prog };
   }
