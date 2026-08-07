@@ -800,7 +800,7 @@ let _managePollTimer = null;
 function renderManageDemos() {
   const card = el('div', { class: 'card' }, [el('h2', {}, 'Manage Demos')]);
   card.appendChild(el('p', { class: 'step-hint' },
-    'Delete runs in the background so it never times out — watch it progress and see exactly what (if anything) needs manual cleanup.'));
+    'Delete runs step by step so it never times out — watch it progress here and see exactly what (if anything) needs manual cleanup. A delete can take a few minutes; keep this page open while it runs.'));
   const body = el('div', {}, el('p', { class: 'muted' }, 'Loading…'));
   card.appendChild(body);
 

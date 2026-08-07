@@ -123,6 +123,13 @@ async function deleteTransformer(conn, idOrName) {
   return { deleted: idOrName };
 }
 
+// Fetch a single transformer; throws (already-gone) if it doesn't exist. Used by
+// the delete job's self-heal to verify a transformer really exists before
+// re-queueing it for deletion.
+async function getTransformer(conn, idOrName) {
+  return get(conn, `${PATHS.transformers}/${encodeURIComponent(idOrName)}`);
+}
+
 // --- Personalization Point (+ nested Decisions) --------------------------------
 
 // def: {
@@ -197,6 +204,7 @@ module.exports = {
   deleteSchema,
   createTransformer,
   deleteTransformer,
+  getTransformer,
   createPoint,
   deletePoint,
   listExperienceConfigs,

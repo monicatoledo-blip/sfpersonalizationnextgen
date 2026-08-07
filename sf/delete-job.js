@@ -241,6 +241,43 @@ async function stepDelete(row) {
   // deletes (the org's dependency index releases minutes later).
   if (!prog.experienceConfigs.length && !prog.queue.pps.length && !prog.queue.transformers.length) {
     await drain('Content Schema', p13n.deleteSchema, 'schemas');
+
+    // SELF-HEAL: if a schema is still blocked by a Transformer or Personalization
+    // Point (not mere index lag), that upstream object was NOT actually deleted —
+    // e.g. the job was interrupted (dyno restart) after marking it "removed" in
+    // saved progress but before the API call committed. Re-queue those upstream
+    // objects from the artifacts so they get deleted, then schemas can proceed.
+    // Guard against loops: only re-queue objects that still exist AND aren't
+    // already queued, and cap how many times we do this.
+    const blockedByTransformer = prog.orphans.some(
+      (o) => o.type === 'Content Schema' && /Transformer/i.test(String(o.reason || ''))
+    ) || prog.queue.schemas.length > 0;
+    prog._reheals = prog._reheals || 0;
+    if (blockedByTransformer && prog._reheals < 3) {
+      const art = readArtifacts(row.sf_artifacts);
+      const queuedT = new Set(prog.queue.transformers.map((x) => x.ref));
+      const queuedP = new Set(prog.queue.pps.map((x) => x.ref));
+      const reT = art.transformers.map(refOf).filter((r) => r && !queuedT.has(r));
+      const reP = art.pps.map(refOf).filter((r) => r && !queuedP.has(r));
+      let rehealed = false;
+      // Verify existence before re-queueing so we don't thrash on truly-gone ones.
+      for (const ref of reT) {
+        try { await p13n.getTransformer(conn, ref); prog.queue.transformers.push({ ref, attempts: 0 }); rehealed = true; }
+        catch (_) { /* gone: leave it */ }
+      }
+      if (rehealed) {
+        // Drop the transformer-blocked schema orphans back into the queue to retry
+        // after the transformers are re-deleted next step.
+        const stillOrphan = [];
+        for (const o of prog.orphans) {
+          if (o.type === 'Content Schema' && /Transformer/i.test(String(o.reason || ''))) {
+            prog.queue.schemas.push({ ref: o.ref, attempts: 0 });
+          } else stillOrphan.push(o);
+        }
+        prog.orphans = stillOrphan;
+        prog._reheals += 1;
+      }
+    }
   }
 
   // Compute terminal / running state + a human message.
