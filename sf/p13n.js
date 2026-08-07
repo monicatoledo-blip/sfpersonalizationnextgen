@@ -119,8 +119,30 @@ async function createTransformer(conn, def) {
 }
 
 async function deleteTransformer(conn, idOrName) {
-  await del(conn, `${PATHS.transformers}/${encodeURIComponent(idOrName)}`);
-  return { deleted: idOrName };
+  const url = `${PATHS.transformers}/${encodeURIComponent(idOrName)}`;
+  let res;
+  try {
+    res = await conn.request({ method: 'DELETE', url });
+  } catch (err) {
+    throw readableErr(err, `DELETE ${url}`);
+  }
+  // DIAGNOSTIC: transformer DELETE has been returning success without actually
+  // deleting. Log the raw response so we can see what the API returns, then
+  // VERIFY it's gone; if it still exists, treat as a real failure (throw) so
+  // the delete job doesn't falsely mark it removed.
+  console.warn('[p13n] deleteTransformer response', JSON.stringify({ url, res }));
+  try {
+    await get(conn, url); // if this SUCCEEDS, the transformer still exists
+    const e = new Error(`DELETE ${url}: transformer still present after delete (API no-op)`);
+    console.warn('[p13n] deleteTransformer NO-OP — still present:', idOrName);
+    throw e;
+  } catch (verifyErr) {
+    // Expected path: the GET should 404 (already gone) → deletion confirmed.
+    if (/not.?found|does not exist|NOT_FOUND|INVALID_CROSS_REFERENCE|invalid cross|could not find|INVALID_API_INPUT/i.test(String(verifyErr.message || ''))) {
+      return { deleted: idOrName };
+    }
+    throw verifyErr; // includes our "still present" error
+  }
 }
 
 // Fetch a single transformer; throws (already-gone) if it doesn't exist. Used by
